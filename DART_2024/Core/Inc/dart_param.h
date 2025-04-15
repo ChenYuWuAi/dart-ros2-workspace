@@ -1,0 +1,128 @@
+//
+// Created by cheny on 24-6-30.
+//
+
+#ifndef DART_24_DART_PARAM_H
+#define DART_24_DART_PARAM_H
+
+#include "controller.h"
+
+using namespace motor_controller;
+
+// Macros for Dart Launcher Behaviour
+#define CONFIG_FORCE_WAIT_FOR_GAME_PROGRESS 0 // 如果此项被启用，则比赛模式一旦进入发射准备状态，将无法退出
+
+// Macros for PID params
+#define PID_MOTORLS_KP 15
+#define PID_MOTORLS_KI 0.1
+#define PID_MOTORLS_KD 0.1
+#define PID_MOTORLS_SUM_ERROR_MAX 20000
+#define PID_MOTORLS_P_MAX 8000
+#define PID_MOTORLS_I_MAX 20000
+
+#define PID_MOTORY_KP 13
+#define PID_MOTORY_KI 0.3
+#define PID_MOTORY_KD 0.1
+#define PID_MOTORY_SUM_ERROR_MAX 360000
+#define PID_MOTORY_P_MAX 4300
+#define PID_MOTORY_I_MAX 13000
+#define PID_MOTORY_OUTPUT_MAX 16386
+
+#define PID_MOTORY_ANGLE_KP 0.4
+#define PID_MOTORY_ANGLE_KI 0
+#define PID_MOTORY_ANGLE_KD 0.01
+#define PID_MOTORY_ANGLE_SUM_ERROR_MAX 200000
+#define PID_MOTORY_ANGLE_P_MAX 10000
+#define PID_MOTORY_ANGLE_I_MAX 200
+#define PID_MOTORY_ANGLE_OUTPUT_MAX 200
+
+#define PID_MOTORDM_KP 3
+#define PID_MOTORDM_KI 0.2
+#define PID_MOTORDM_KD 0
+#define PID_MOTORDM_SUM_ERROR_MAX 100
+#define PID_MOTORDM_P_MAX 10000
+#define PID_MOTORDM_I_MAX 3000
+
+// Macros for debug mode params
+#define TARGET_VELOCITY_RATIO 1.414 // Ratio for second level by first level friction wheel
+#define TARGET_VELOCITY_FW 5000
+#define TARGET_VELOCITY_FW_OFFSET 0
+#define TARGET_YAW_ANGLE_WITH_ROUNDS 10000
+#define TARGET_YAW_ANGLE_WITH_ROUNDS_OFFSET 0
+
+// Macros for launch params
+#define LAUNCH_PARAMS_NUM 4
+#define LAUNCH_PARAMS_DEFAULT_TARGET_VELOCITY_FW_ALL TARGET_VELOCITY_FW
+#define LAUNCH_PARAMS_DEFAULT_TARGET_VELOCITY_FW_OFFSET_0 TARGET_VELOCITY_FW_OFFSET
+#define LAUNCH_PARAMS_DEFAULT_TARGET_VELOCITY_FW_OFFSET_1 TARGET_VELOCITY_FW_OFFSET
+#define LAUNCH_PARAMS_DEFAULT_TARGET_VELOCITY_FW_OFFSET_2 TARGET_VELOCITY_FW_OFFSET
+#define LAUNCH_PARAMS_DEFAULT_TARGET_VELOCITY_FW_OFFSET_3 TARGET_VELOCITY_FW_OFFSET
+
+#define LAUNCH_PARAMS_DEFAULT_TARGET_YAW_ANGLE_WITH_ROUNDS_ALL TARGET_YAW_ANGLE_WITH_ROUNDS
+#define LAUNCH_PARAMS_DEFAULT_TARGET_YAW_ANGLE_WITH_ROUNDS_OFFSET_0 TARGET_YAW_ANGLE_WITH_ROUNDS_OFFSET
+#define LAUNCH_PARAMS_DEFAULT_TARGET_YAW_ANGLE_WITH_ROUNDS_OFFSET_1 TARGET_YAW_ANGLE_WITH_ROUNDS_OFFSET
+#define LAUNCH_PARAMS_DEFAULT_TARGET_YAW_ANGLE_WITH_ROUNDS_OFFSET_2 TARGET_YAW_ANGLE_WITH_ROUNDS_OFFSET
+#define LAUNCH_PARAMS_DEFAULT_TARGET_YAW_ANGLE_WITH_ROUNDS_OFFSET_3 TARGET_YAW_ANGLE_WITH_ROUNDS_OFFSET
+
+// Velocity Params
+#define LEAD_SCREW_UP_VELOCITY 10000
+#define LEAD_SCREW_DOWN_VELOCITY (-5000)
+
+#define DRUM_MAGAZINE_LEFT_VELOCITY 4000
+#define DRUM_MAGAZINE_RIGHT_VELOCITY (-DRUM_MAGAZINE_LEFT_VELOCITY)
+
+#define DRUM_MAGAZINE_LEFT_GATE_VELOCITY 50
+#define DRUM_MAGAZINE_RIGHT_GATE_VELOCITY (-DRUM_MAGAZINE_LEFT_GATE_VELOCITY)
+#define DRUM_MAGAZINE_BLOCK_TIMEOUT 100 // ms
+
+#define YAW_RIGHT_VELOCITY 300
+#define YAW_LEFT_VELOCITY (-YAW_MOTOR_RIGHT_VELOCITY)
+
+#define YAW_RIGHT_GATE_VELOCITY 150
+#define YAW_RIGHT_BLOCK_TIMEOUT 50 // ms
+#define MAX_YAW_ANGLE 370000
+
+// Match Mode Params
+#define FIRST_LAUNCH_POSITION_ROUNDS 800
+#define SECOND_LAUNCH_POSITION_ROUNDS 1250
+#define WAIT_TIME_BEFORE_LAUNCH 3500 // ms
+
+// Buzzer Params
+#define BUZZER_WARNING_TIM_RELOAD 26000
+#define BUZZER_INFO_TIM_RELOAD 8192
+#define BUZZER_INFO_VOLUME 4096
+#define BUZZER_WARNING_VOLUME 14000
+
+enum E_Dart_Can_Param_Index {
+    VELOCITY_RATIO = 1,
+    VELOCITY_FW,
+    VELOCITY_FW_OFFSET,
+    YAW_ANGLE_WITH_ROUNDS,
+    YAW_ANGLE_WITH_ROUNDS_OFFSET,
+    LAUNCH_PARAMS_TARGET_VELOCITY_FW_OFFSET_0,
+    LAUNCH_PARAMS_TARGET_VELOCITY_FW_OFFSET_1,
+    LAUNCH_PARAMS_TARGET_VELOCITY_FW_OFFSET_2,
+    LAUNCH_PARAMS_TARGET_VELOCITY_FW_OFFSET_3,
+    LAUNCH_PARAMS_TARGET_YAW_ANGLE_WITH_ROUNDS_OFFSET_0,
+    LAUNCH_PARAMS_TARGET_YAW_ANGLE_WITH_ROUNDS_OFFSET_1,
+    LAUNCH_PARAMS_TARGET_YAW_ANGLE_WITH_ROUNDS_OFFSET_2,
+    LAUNCH_PARAMS_TARGET_YAW_ANGLE_WITH_ROUNDS_OFFSET_3
+};
+
+typedef struct {
+    int32_t target_velocity_fw_offset;
+    uint32_t target_yaw_angle_with_rounds_offset;
+} launch_params_t;
+
+// Extern Variables for target speed & target angle
+extern double target_velocity_ratio;                    // Ratio for second level by first level friction wheel
+extern int32_t target_velocity_fw;                      // Directly changed by RC in debug mode
+extern int32_t target_velocity_fw_offset;               // Default zero, changed by ROS system in debug mode
+extern uint32_t target_yaw_angle_with_rounds;           // Directly changed by RC in debug mode
+extern int32_t target_yaw_angle_with_rounds_offset;    // Default zero, changed by ROS system in debug mode
+
+extern launch_params_t launch_params[LAUNCH_PARAMS_NUM];          // Used in Race Mode, provided by ROS system or manual input by code
+
+void can_param_decode(CAN_RxHeaderTypeDef *rxHeader, const uint8_t *rxData);
+
+#endif //DART_24_DART_PARAM_H
