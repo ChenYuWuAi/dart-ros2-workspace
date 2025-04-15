@@ -1,0 +1,27 @@
+/dart_config:
+  ros__parameters:
+    auto_fw_calibration: false
+    auto_yaw_calibration: false
+    dart_selection:
+      - 7.34
+      - 7.25
+      - 7.27
+      - 7.32
+    target_delta_height: 0.240000
+    target_distance: 25.500000
+    target_fw_velocity: 6981
+    target_fw_velocity_launch_offset:
+      - 100
+      - -15
+      - -103
+      - -113
+    target_fw_velocity_offset: 0
+    target_fw_velocity_ratio: 0.900000
+    target_yaw_angle: 140968
+    target_yaw_angle_offset: 0
+    target_yaw_launch_angle_offset:
+      - -7000
+      - -12000
+      - -2200
+      - -7100
+    target_yaw_x_axis: 892.000000

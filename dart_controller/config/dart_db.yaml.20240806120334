@@ -1,5 +1,5 @@
 7.25:
-  target_yaw_angle_offset: 2500
+  target_yaw_angle_offset: 0
   target_fw_velocity_offset: 0
   fw_velocity_points:
     - fw_velocity: 5022
@@ -44,7 +44,7 @@
     - fw_velocity: 5262
       velocity: 18
 7.26:
-  target_yaw_angle_offset: -9600
+  target_yaw_angle_offset: 0
   target_fw_velocity_offset: 0
   fw_velocity_points:
     - fw_velocity: 5050
@@ -64,7 +64,7 @@
     - fw_velocity: 5190
       velocity: 17.800000000000001
 7.27:
-  target_yaw_angle_offset: 2000
+  target_yaw_angle_offset: 1000
   target_fw_velocity_offset: 0
   distance_velocity_points:
     - distance: 25.350000000000001
@@ -88,15 +88,15 @@
     - distance: 28.300000000000001
       velocity: 18.078733267877777
   fw_velocity_points:
-    - fw_velocity: 5923
+    - fw_velocity: 4853
       velocity: 16.600000000000001
-    - fw_velocity: 6123
+    - fw_velocity: 5053
       velocity: 16.899999999999999
-    - fw_velocity: 6323
+    - fw_velocity: 5253
       velocity: 17.300000000000001
-    - fw_velocity: 6523
+    - fw_velocity: 5453
       velocity: 17.5
-    - fw_velocity: 6723
+    - fw_velocity: 5653
       velocity: 17.899999999999999
   distance_calibrated_points:
     - distance: 25.350000000000001
@@ -120,18 +120,18 @@
     - distance: 28.300000000000001
       velocity: 18.078733267877777
   fw_velocity_calibrated_points:
-    - fw_velocity: 5923
+    - fw_velocity: 4853
       velocity: 16.600000000000001
-    - fw_velocity: 6123
+    - fw_velocity: 5053
       velocity: 16.899999999999999
-    - fw_velocity: 6323
+    - fw_velocity: 5253
       velocity: 17.300000000000001
-    - fw_velocity: 6523
+    - fw_velocity: 5453
       velocity: 17.5
-    - fw_velocity: 6723
+    - fw_velocity: 5653
       velocity: 17.899999999999999
 7.32:
-  target_yaw_angle_offset: 1500
+  target_yaw_angle_offset: 300
   target_fw_velocity_offset: 0
   distance_velocity_points:
     - distance: 25.949999999999999
@@ -153,29 +153,29 @@
     - distance: 28.850000000000001
       velocity: 18.185934964821893
   fw_velocity_points:
-    - fw_velocity: 6569
+    - fw_velocity: 4730
       velocity: 16.800000000000001
-    - fw_velocity: 6599
+    - fw_velocity: 4760
       velocity: 17.100000000000001
-    - fw_velocity: 6599
+    - fw_velocity: 4760
       velocity: 17.100000000000001
-    - fw_velocity: 6649
+    - fw_velocity: 4810
       velocity: 17.199999999999999
-    - fw_velocity: 6669
+    - fw_velocity: 4830
       velocity: 17.300000000000001
-    - fw_velocity: 6682
+    - fw_velocity: 4843
       velocity: 17.399999999999999
-    - fw_velocity: 6709
+    - fw_velocity: 4870
       velocity: 17.5
-    - fw_velocity: 6714
+    - fw_velocity: 4875
       velocity: 17.600000000000001
-    - fw_velocity: 6759
+    - fw_velocity: 4920
       velocity: 17.699999999999999
-    - fw_velocity: 6782
+    - fw_velocity: 4943
       velocity: 17.800000000000001
-    - fw_velocity: 6809
+    - fw_velocity: 4970
       velocity: 17.899999999999999
-    - fw_velocity: 6829
+    - fw_velocity: 4990
       velocity: 18
   distance_calibrated_points:
     - distance: 25.949999999999999
@@ -197,29 +197,29 @@
     - distance: 28.850000000000001
       velocity: 18.185934964821893
   fw_velocity_calibrated_points:
-    - fw_velocity: 6569
+    - fw_velocity: 4730
       velocity: 16.800000000000001
-    - fw_velocity: 6599
+    - fw_velocity: 4760
       velocity: 17.100000000000001
-    - fw_velocity: 6599
+    - fw_velocity: 4760
       velocity: 17.100000000000001
-    - fw_velocity: 6649
+    - fw_velocity: 4810
       velocity: 17.199999999999999
-    - fw_velocity: 6669
+    - fw_velocity: 4830
       velocity: 17.300000000000001
-    - fw_velocity: 6682
+    - fw_velocity: 4843
       velocity: 17.399999999999999
-    - fw_velocity: 6709
+    - fw_velocity: 4870
       velocity: 17.5
-    - fw_velocity: 6714
+    - fw_velocity: 4875
       velocity: 17.600000000000001
-    - fw_velocity: 6759
+    - fw_velocity: 4920
       velocity: 17.699999999999999
-    - fw_velocity: 6782
+    - fw_velocity: 4943
       velocity: 17.800000000000001
-    - fw_velocity: 6809
+    - fw_velocity: 4970
       velocity: 17.899999999999999
-    - fw_velocity: 6829
+    - fw_velocity: 4990
       velocity: 18
 7.33:
   target_yaw_angle_offset: 0
@@ -309,7 +309,7 @@
     - fw_velocity: 5615
       velocity: 17.899999999999999
 7.34:
-  target_yaw_angle_offset: -7000
+  target_yaw_angle_offset: 0
   target_fw_velocity_offset: 0
   distance_velocity_points:
     - distance: 24.629999999999999
@@ -339,29 +339,29 @@
     - distance: 28.449999999999999
       velocity: 18.041744665001239
   fw_velocity_points:
-    - fw_velocity: 6688
+    - fw_velocity: 4959
       velocity: 16.899999999999999
-    - fw_velocity: 6726
+    - fw_velocity: 4997
       velocity: 17
-    - fw_velocity: 6761
+    - fw_velocity: 5032
       velocity: 17.100000000000001
-    - fw_velocity: 6761
+    - fw_velocity: 5032
       velocity: 17.199999999999999
-    - fw_velocity: 6776
+    - fw_velocity: 5047
       velocity: 17.300000000000001
-    - fw_velocity: 6807
+    - fw_velocity: 5078
       velocity: 17.399999999999999
-    - fw_velocity: 6831
+    - fw_velocity: 5102
       velocity: 17.5
-    - fw_velocity: 6851
+    - fw_velocity: 5122
       velocity: 17.600000000000001
-    - fw_velocity: 6871
+    - fw_velocity: 5142
       velocity: 17.699999999999999
-    - fw_velocity: 6877
+    - fw_velocity: 5148
       velocity: 17.800000000000001
-    - fw_velocity: 6891
+    - fw_velocity: 5162
       velocity: 17.899999999999999
-    - fw_velocity: 6891
+    - fw_velocity: 5162
       velocity: 18
   distance_calibrated_points:
     - distance: 24.629999999999999
@@ -391,32 +391,32 @@
     - distance: 28.449999999999999
       velocity: 18.041744665001239
   fw_velocity_calibrated_points:
-    - fw_velocity: 6688
+    - fw_velocity: 4959
       velocity: 16.899999999999999
-    - fw_velocity: 6726
+    - fw_velocity: 4997
       velocity: 17
-    - fw_velocity: 6761
+    - fw_velocity: 5032
       velocity: 17.100000000000001
-    - fw_velocity: 6761
+    - fw_velocity: 5032
       velocity: 17.199999999999999
-    - fw_velocity: 6776
+    - fw_velocity: 5047
       velocity: 17.300000000000001
-    - fw_velocity: 6807
+    - fw_velocity: 5078
       velocity: 17.399999999999999
-    - fw_velocity: 6831
+    - fw_velocity: 5102
       velocity: 17.5
-    - fw_velocity: 6851
+    - fw_velocity: 5122
       velocity: 17.600000000000001
-    - fw_velocity: 6871
+    - fw_velocity: 5142
       velocity: 17.699999999999999
-    - fw_velocity: 6877
+    - fw_velocity: 5148
       velocity: 17.800000000000001
-    - fw_velocity: 6891
+    - fw_velocity: 5162
       velocity: 17.899999999999999
-    - fw_velocity: 6891
+    - fw_velocity: 5162
       velocity: 18
 7.35:
-  target_yaw_angle_offset: -18800
+  target_yaw_angle_offset: 0
   target_fw_velocity_offset: 0
   distance_velocity_points:
     - distance: 24.949999999999999
@@ -438,19 +438,19 @@
     - distance: 27.649999999999999
       velocity: 17.55438176921972
   fw_velocity_points:
-    - fw_velocity: 6681
+    - fw_velocity: 4783
       velocity: 17.199999999999999
-    - fw_velocity: 6742
+    - fw_velocity: 4844
       velocity: 17.5
-    - fw_velocity: 6761
+    - fw_velocity: 4863
       velocity: 17.5
-    - fw_velocity: 6781
+    - fw_velocity: 4883
       velocity: 17.600000000000001
-    - fw_velocity: 6821
+    - fw_velocity: 4923
       velocity: 17.699999999999999
-    - fw_velocity: 6842
+    - fw_velocity: 4944
       velocity: 17.800000000000001
-    - fw_velocity: 6881
+    - fw_velocity: 4983
       velocity: 18.100000000000001
   distance_calibrated_points:
     - distance: 24.949999999999999
@@ -472,17 +472,17 @@
     - distance: 27.649999999999999
       velocity: 17.55438176921972
   fw_velocity_calibrated_points:
-    - fw_velocity: 6681
+    - fw_velocity: 4977
       velocity: 17.199999999999999
-    - fw_velocity: 6742
+    - fw_velocity: 5038
       velocity: 17.5
-    - fw_velocity: 6761
+    - fw_velocity: 5057
       velocity: 17.5
-    - fw_velocity: 6781
+    - fw_velocity: 5077
       velocity: 17.600000000000001
-    - fw_velocity: 6821
+    - fw_velocity: 5117
       velocity: 17.699999999999999
-    - fw_velocity: 6842
+    - fw_velocity: 5138
       velocity: 17.800000000000001
-    - fw_velocity: 6881
+    - fw_velocity: 5177
       velocity: 18.100000000000001

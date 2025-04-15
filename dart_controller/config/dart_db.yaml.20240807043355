@@ -1,5 +1,5 @@
 7.25:
-  target_yaw_angle_offset: 2500
+  target_yaw_angle_offset: 0
   target_fw_velocity_offset: 0
   fw_velocity_points:
     - fw_velocity: 5022
@@ -44,7 +44,7 @@
     - fw_velocity: 5262
       velocity: 18
 7.26:
-  target_yaw_angle_offset: -9600
+  target_yaw_angle_offset: 0
   target_fw_velocity_offset: 0
   fw_velocity_points:
     - fw_velocity: 5050
@@ -64,7 +64,7 @@
     - fw_velocity: 5190
       velocity: 17.800000000000001
 7.27:
-  target_yaw_angle_offset: 2000
+  target_yaw_angle_offset: 6000
   target_fw_velocity_offset: 0
   distance_velocity_points:
     - distance: 25.350000000000001
@@ -131,7 +131,7 @@
     - fw_velocity: 6723
       velocity: 17.899999999999999
 7.32:
-  target_yaw_angle_offset: 1500
+  target_yaw_angle_offset: 6600
   target_fw_velocity_offset: 0
   distance_velocity_points:
     - distance: 25.949999999999999
@@ -309,7 +309,7 @@
     - fw_velocity: 5615
       velocity: 17.899999999999999
 7.34:
-  target_yaw_angle_offset: -7000
+  target_yaw_angle_offset: 10000
   target_fw_velocity_offset: 0
   distance_velocity_points:
     - distance: 24.629999999999999
@@ -416,7 +416,7 @@
     - fw_velocity: 6891
       velocity: 18
 7.35:
-  target_yaw_angle_offset: -18800
+  target_yaw_angle_offset: 0
   target_fw_velocity_offset: 0
   distance_velocity_points:
     - distance: 24.949999999999999

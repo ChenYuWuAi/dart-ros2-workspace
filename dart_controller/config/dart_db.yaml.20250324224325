@@ -44,7 +44,7 @@
     - fw_velocity: 5262
       velocity: 18
 7.26:
-  target_yaw_angle_offset: -9600
+  target_yaw_angle_offset: -8600
   target_fw_velocity_offset: 0
   fw_velocity_points:
     - fw_velocity: 5050

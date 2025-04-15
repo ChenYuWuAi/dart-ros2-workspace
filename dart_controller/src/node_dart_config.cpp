@@ -99,10 +99,11 @@ void NodeDartConfig::loadParameters()
         return;
     }
 
-    for (YAML::const_iterator it = config.begin(); it != config.end(); ++it)
+    for (const auto &it : config)
     {
-        const std::string &param_name = it->first.as<std::string>();
-        const auto &value = it->second;
+        const std::string &param_name = it.first.as<std::string>();
+        
+        const auto &value = it.second;
 
         if (value.IsScalar())
         {
