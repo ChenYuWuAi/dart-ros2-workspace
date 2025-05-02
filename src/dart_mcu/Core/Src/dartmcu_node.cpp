@@ -14,11 +14,9 @@
 #include <string.h>
 
 #include <std_msgs/msg/int32.h>
-#include <std_msgs/msg/int64.h>
-#include <std_msgs/msg/float64.h>
 #include <std_msgs/msg/string.h>
-#include <std_msgs/msg/int32_multi_array.h>
 #include <dart_msgs/msg/dart_param.h>
+#include <dart_msgs/msg/green_light.h>
 #include <buzzer.h>
 #include "buzzer_examples.h"
 #include "dartmcu_node.h"
@@ -45,20 +43,17 @@ enum states {
     AGENT_DISCONNECTED
 } state;
 
-bool msg_pending = false;
-
 // 日志队列
-// 原来： QueueHandle_t xLogQueue;
 std::queue<char *> xLogQueue;  // 存放 malloc 出来的 char*
-SemaphoreHandle_t xLogSemaphore;
 
+// MicroROS 实体
 rcl_allocator_t allocator;
 rcl_subscription_t subscriber_buzzer = rcl_get_zero_initialized_subscription();
-rcl_subscription_t subscriber_servo = rcl_get_zero_initialized_subscription();
+rcl_subscription_t subscriber_protocol = rcl_get_zero_initialized_subscription();
 rcl_subscription_t subscriber_parameter = rcl_get_zero_initialized_subscription();
-rcl_publisher_t publisher;
-rcl_publisher_t publisher_can;
-rcl_publisher_t publisher_dart_velocity_meter;
+rcl_subscription_t subscriber_greenlight = rcl_get_zero_initialized_subscription();
+rcl_publisher_t publisher = rcl_get_zero_initialized_publisher();
+rcl_publisher_t publisher_can = rcl_get_zero_initialized_publisher();
 rcl_node_t node;
 rclc_support_t support;
 rcl_timer_t timer, timer2;
@@ -66,9 +61,11 @@ rcl_timer_t timer, timer2;
 rclc_executor_t executor;
 std_msgs__msg__Int64 msgInt64;
 std_msgs__msg__String msgString;
+
+dart_msgs__msg__GreenLight msgGreenLight;
+dart_msgs__msg__DartParam msgDartParam;
+
 char msgString_buf[LOG_BUF_LEN];
-int32_t dart_launcher_param_data_msg_buf[DL_PARAMS_BUF_LEN];
-int32_t dart_launcher_status_data_msg_buf[DL_STATUS_BUF_LEN];
 
 velocity_meter_result_t velocity_meter_result;
 
@@ -202,23 +199,12 @@ void timer_callback(rcl_timer_t *timer, int64_t last_call_time) {
     }
 }
 
-std_msgs__msg__Int32MultiArray dart_launcher_status_data_msg;
-
-std_msgs__msg__Int32MultiArray dart_launcher_param_data_msg;
-
 void timer2_callback(rcl_timer_t *timer, int64_t last_call_time) {
     (void) last_call_time;
     if (timer != nullptr) {
         // 序列化镖架状态变量发送
-        serializeStatus(&dart_launcher_status, dart_launcher_status_data_msg.data.data);
-        rcl_publish(&publisher_can, &dart_launcher_status_data_msg, nullptr);
 
-        double velocity = 0;
-
-        velocity = velocity_meter_result.velocity;
-        std_msgs__msg__Float64 msg_velocity;
-        msg_velocity.data = velocity;
-        rcl_publish(&publisher_dart_velocity_meter, &msg_velocity, NULL);
+        rcl_publish(&publisher_can, &msgDartParam, nullptr);
     }
 }
 
@@ -238,16 +224,10 @@ bool create_entities() {
             ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
             "/dart_launcher_mcu/log");
 
-    rclc_publisher_init_default(
-            &publisher_dart_velocity_meter,
-            &node,
-            ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float64),
-            "/dart_launcher_mcu/dart_velocity_meter");
-
     rclc_publisher_init_best_effort(
             &publisher_can,
             &node,
-            ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32MultiArray),
+            ROSIDL_GET_MSG_TYPE_SUPPORT(dart_msgs, msg, DartParam),
             "/dart_launcher_mcu/status");
 
     // subscribe to /buzzer/cmd_note and /buzzer/cmd_sound_effect
@@ -259,16 +239,16 @@ bool create_entities() {
             "/dart_launcher_mcu/cmd_sound_effect"))
 
     RCSOFTCHECK(rclc_subscription_init_best_effort(
-            &subscriber_servo,
+            &subscriber_protocol,
             &node,
-            ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
-            "/dart_launcher_mcu/cmd_servo_test"))
+            ROSIDL_GET_MSG_TYPE_SUPPORT(dart_msgs, msg, DartParam),
+            "/dart_launcher_mcu/cmd_protocols"));
 
     RCSOFTCHECK(rclc_subscription_init_default(
             &subscriber_parameter,
             &node,
-            ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32MultiArray),
-            "/dart_launcher_mcu/cmd_param"))
+            ROSIDL_GET_MSG_TYPE_SUPPORT(dart_msgs, msg, DartParam),
+            "/dart_launcher_mcu/cmd_params"))
 
     // create timer,
     const unsigned int timer1_timeout = 100;
@@ -290,45 +270,6 @@ bool create_entities() {
     msgString.data.data = msgString_buf;
     msgString.data.size = 0;
 
-    dart_launcher_status_data_msg.data.capacity = DL_STATUS_BUF_LEN;
-    dart_launcher_status_data_msg.data.size = DL_STATUS_BUF_LEN;
-
-    // 分配内存给 data 数组
-    dart_launcher_status_data_msg.data.data = dart_launcher_status_data_msg_buf;
-
-    // 初始化 layout.dim 数组
-    dart_launcher_status_data_msg.layout.dim.capacity = 1;
-    dart_launcher_status_data_msg.layout.dim.size = 1;
-
-    // 为 dim 分配内存
-    static std_msgs__msg__MultiArrayDimension dim;
-    dart_launcher_status_data_msg.layout.dim.data = &dim;
-
-    // 初始化维度信息
-    static char label[] = "dart_launcher_status";
-    dart_launcher_status_data_msg.layout.dim.data[0].label.data = label;
-    dart_launcher_status_data_msg.layout.dim.data[0].label.size = strlen(label);
-    dart_launcher_status_data_msg.layout.dim.data[0].label.capacity = strlen(label);
-    dart_launcher_status_data_msg.layout.dim.data[0].size = DL_STATUS_BUF_LEN;
-    dart_launcher_status_data_msg.layout.dim.data[0].stride = 1;  // 步长设置为1
-
-    dart_launcher_param_data_msg.data.capacity = DL_PARAMS_BUF_LEN;
-    dart_launcher_param_data_msg.data.size = DL_PARAMS_BUF_LEN;
-
-    dart_launcher_param_data_msg.data.data = dart_launcher_param_data_msg_buf;
-
-    dart_launcher_param_data_msg.layout.dim.capacity = 1;
-    dart_launcher_param_data_msg.layout.dim.size = 1;
-    static std_msgs__msg__MultiArrayDimension dim2;
-    dart_launcher_param_data_msg.layout.dim.data = &dim2;  // 分配内存给 dim 数组
-
-    static char label2[] = "dart_launcher_parameter";
-    dart_launcher_param_data_msg.layout.dim.data[0].label.data = label2;
-    dart_launcher_param_data_msg.layout.dim.data[0].label.size = strlen(label2);
-    dart_launcher_param_data_msg.layout.dim.data[0].label.capacity = strlen(label2);
-    dart_launcher_param_data_msg.layout.dim.data[0].size = DL_PARAMS_BUF_LEN;   // 长度为DL_PARAMS_BUF_LEN
-    dart_launcher_param_data_msg.layout.dim.data[0].stride = 1;  // 步长设置为1
-
     // create executor
     executor = rclc_executor_get_zero_initialized_executor();
     RCCHECK(rclc_executor_init(&executor, &support.context, 6, &allocator));
@@ -338,10 +279,13 @@ bool create_entities() {
     RCSOFTCHECK(rclc_executor_add_subscription(&executor, &subscriber_buzzer, &msgInt64,
                                                &subscription_buzzer_callback,
                                                ON_NEW_DATA));
-    RCSOFTCHECK(rclc_executor_add_subscription(&executor, &subscriber_servo, &msgInt64,
-                                               &subscription_servo_callback,
+    RCSOFTCHECK(rclc_executor_add_subscription(&executor, &subscriber_protocol, &msgDartParam,
+                                               &subscription_protocol_setting_callback,
                                                ON_NEW_DATA));
-    RCSOFTCHECK(rclc_executor_add_subscription(&executor, &subscriber_parameter, &dart_launcher_param_data_msg,
+    RCSOFTCHECK(rclc_executor_add_subscription(&executor, &subscriber_parameter, &msgDartParam,
+                                               &subscription_parameter_setting_callback,
+                                               ON_NEW_DATA));
+    RCSOFTCHECK(rclc_executor_add_subscription(&executor, &subscriber_greenlight, &msgGreenLight,
                                                &subscription_parameter_setting_callback,
                                                ON_NEW_DATA));
 
@@ -354,10 +298,10 @@ void destroy_entities() {
 
     rcl_publisher_fini(&publisher, &node);
     rcl_publisher_fini(&publisher_can, &node);
-    rcl_publisher_fini(&publisher_dart_velocity_meter, &node);
     rcl_timer_fini(&timer);
     rcl_subscription_fini(&subscriber_buzzer, &node);
-    rcl_subscription_fini(&subscriber_servo, &node);
+    rcl_subscription_fini(&subscriber_protocol, &node);
+    rcl_subscription_fini(&subscriber_greenlight, &node);
     rclc_executor_fini(&executor);
     rcl_node_fini(&node);
     rclc_support_fini(&support);
@@ -407,7 +351,7 @@ void subscription_buzzer_callback(const void *msgin) {
 // 将堵转电机移动到初始位置
 state_machine::UpsideState state_machine::upside_state = state_machine::UpsideState::Idle;
 
-void subscription_servo_callback(const void *msgin) {
+void subscription_protocol_setting_callback(const void *msgin) {
     const std_msgs__msg__Int32 *msg = (const std_msgs__msg__Int32 *) msgin;
 
     if (msgin != NULL) {
@@ -435,13 +379,13 @@ void subscription_servo_callback(const void *msgin) {
 }
 
 void subscription_parameter_setting_callback(const void *msgin) {
-    const auto *msg = (const std_msgs__msg__Int32MultiArray *) msgin;
+    const auto *msg = (const dart_msgs__msg__DartParam *) msgin;
     if (msgin != NULL) {
-        int32_t *data = msg->data.data;
-        motor_controller::MotorYawLSController.target_angle_with_rounds_ = data[0];
-        dart_launcher_params.primary_yaw = data[0];
-        motor_controller::MotorTriggerLSController.target_angle_with_rounds_ = data[1];
-        dart_launcher_params.primary_force = data[1];
+//        int32_t *data = msg->data.data;
+//        motor_controller::MotorYawLSController.target_angle_with_rounds_ = data[0];
+//        dart_launcher_params.primary_yaw = data[0];
+//        motor_controller::MotorTriggerLSController.target_angle_with_rounds_ = data[1];
+//        dart_launcher_params.primary_force = data[1];
     }
 }
 
