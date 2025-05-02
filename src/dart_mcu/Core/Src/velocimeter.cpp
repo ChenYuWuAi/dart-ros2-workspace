@@ -37,6 +37,7 @@ namespace meter {
         HAL_GPIO_WritePin(GPIOH, GPIO_PIN_5, GPIO_PIN_SET);
         prev_state = state;
         state = oneshot ? ONESHOT : CONTINOUS;
+        HAL_TIM_IC_Start_IT(htim_begin, channel_begin);
     }
 
     void velocimeter::disable() {
