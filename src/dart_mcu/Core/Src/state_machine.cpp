@@ -222,12 +222,9 @@ do{                        \
         dart_launcher_status.rc_online = isRemoteOnline();
         dart_launcher_status.dart_launch_process = openFSM_.focusEState();
         dart_launcher_status.motor_yaw_angle = motor_controller::MotorYawLSController.current_angle_with_rounds_;
-        dart_launcher_status.motor_trigger_angle =
-            motor_controller::MotorTriggerLSController.current_angle_with_rounds_;
-        dart_launcher_status.motor_loader_angle[0] =
-            motor_controller::MotorLoadController[0].current_angle_with_rounds_;
-        dart_launcher_status.motor_loader_angle[1] =
-            motor_controller::MotorLoadController[1].current_angle_with_rounds_;
+        dart_launcher_status.motor_trigger_angle = motor::MotorTriggerLS.current_round_ * 8192 + motor::MotorTriggerLS.current_angle_;
+        dart_launcher_status.motor_loader_angle[0] =motor::MotorLoad[0].current_round_ * 8192 + motor::MotorLoad[0].current_angle_;
+        dart_launcher_status.motor_loader_angle[1] =motor::MotorLoad[1].current_round_ * 8192 + motor::MotorLoad[1].current_angle_;
         dart_launcher_status.motor_loader_current[0] =
             motor::MotorLoad[0].target_current_;
         dart_launcher_status.motor_loader_current[1] =
@@ -334,14 +331,12 @@ do{                        \
      * @param openloop_ 是否开环
      * @return 是否执行完成
      */
-    template <typename TypeTarget, typename TypeGate, typename TypeController>
     E_ResetActionReturnState
-    actionResetMotorUntilBlocked(motor_controller::pid_angle_velocity_controller<TypeController>& controller_,
-                                 TypeTarget operation_target_, TypeGate gate_velocity_, TypeGate gate_current_,
-                                 TickType_t timeout_, uint8_t& running_flag_,
+    actionResetMotorUntilBlocked(motor_controller::pid_angle_velocity_controller<double>& controller_,
+                                 int operation_target_, int gate_velocity_, int gate_current_,
+                                 TickType_t timeout_, TickType_t& last_time, uint8_t& running_flag_,
                                  bool openloop_ = false)
     {
-        static TickType_t last_time;
         if (running_flag_ == 0)
         {
             // 开始运行
@@ -376,11 +371,8 @@ do{                        \
                 {
                     // 停止电机，复原状态
                     if (!openloop_)
-                    //     controller_.target_openloop_ = 0;
-                    // else
                         controller_.target_velocity_ = 0;
-                    // controller_.motor_->setNextStXXate(motor::E_MotorState::IDLE);
-                    running_flag_ = false;
+                    // controller_.motor_->setNextState(motor::E_MotorState::IDLE);
                     controller_.motor_->resetRound();
                     running_flag_ = 2;
                     return E_ResetActionReturnState::Finished; // 完成
@@ -394,7 +386,7 @@ do{                        \
             }
             return E_ResetActionReturnState::Operating; // 未完成
         }
-        else
+        else if (running_flag_ == 2)
             return E_ResetActionReturnState::Finished; // 完成
     }
 
@@ -415,7 +407,12 @@ do{                        \
             motor::MotorTriggerLS.setNextState(motor::E_MotorState::RUNNING);
             fsm.custom<Dart_FSM>()->ActionResetMotors_Load_0_Reset_State = false;
             fsm.custom<Dart_FSM>()->ActionResetMotors_Load_1_Reset_State = false;
+            fsm.custom<Dart_FSM>()->ActionResetMotors_both_initialized = false;
             fsm.custom<Dart_FSM>()->ActionResetMotors_TriggerLS_Reset_State = false;
+            fsm.custom<Dart_FSM>()->ActionGeneral_Timer0_ = 0;
+            fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ = 0;
+            fsm.custom<Dart_FSM>()->ActionGeneral_Timer2_ = 0;
+
             setTriggerServotoReload();
             enableTriggerServo();
 
@@ -430,55 +427,55 @@ do{                        \
                                                    yaw_switch_state,
                                                    CONFIG_TARGET_RESET_VELOCITY_YAWLS) ==
                 E_ResetActionReturnState::Finished;
-            success &= actionResetMotorUntilBlocked<>(motor_controller::MotorTriggerLSController,
-                                                      CONFIG_TARGET_RESET_VELOCITY_TRIGGERLS,
-                                                      CONFIG_GATE_VELOCITY_TRIGGERLS,
-                                                      CONFIG_GATE_CURRENT_TRIGGERLS,
-                                                      pdMS_TO_TICKS(CONFIG_TIMEOUT_RESET_TRIGGER),
-                                                      fsm.custom<Dart_FSM>()->ActionResetMotors_TriggerLS_Reset_State,
-                                                      false) ==
+            success &= actionResetMotorUntilBlocked(motor_controller::MotorTriggerLSController,
+                                                    CONFIG_TARGET_RESET_VELOCITY_TRIGGERLS,
+                                                    CONFIG_GATE_VELOCITY_TRIGGERLS,
+                                                    CONFIG_GATE_CURRENT_TRIGGERLS,
+                                                    pdMS_TO_TICKS(CONFIG_TIMEOUT_RESET_TRIGGER),
+                                                    fsm.custom<Dart_FSM>()->ActionGeneral_Timer0_,
+                                                    fsm.custom<Dart_FSM>()->ActionResetMotors_TriggerLS_Reset_State,
+                                                    false) ==
                 E_ResetActionReturnState::Finished;
-            success &= actionResetMotorUntilBlocked<>(motor_controller::MotorLoadController[0],
-                                                      CONFIG_TARGET_RESET_VELOCITY_LOAD,
-                                                      CONFIG_GATE_VELOCITY_LOAD,
-                                                      CONFIG_GATE_CURRENT_LOAD,
-                                                      pdMS_TO_TICKS(CONFIG_TIMEOUT_RESET_LOAD),
-                                                      fsm.custom<Dart_FSM>()->ActionResetMotors_Load_0_Reset_State,
-                                                      true) ==
+            success &= actionResetMotorUntilBlocked(motor_controller::MotorLoadController[0],
+                                                    CONFIG_TARGET_RESET_VELOCITY_LOAD,
+                                                    CONFIG_GATE_VELOCITY_LOAD,
+                                                    CONFIG_GATE_CURRENT_LOAD,
+                                                    pdMS_TO_TICKS(CONFIG_TIMEOUT_RESET_LOAD),
+                                                    fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_,
+                                                    fsm.custom<Dart_FSM>()->ActionResetMotors_Load_0_Reset_State,
+                                                    true) ==
                 E_ResetActionReturnState::Finished;
-            success &= actionResetMotorUntilBlocked<>(motor_controller::MotorLoadController[1],
-                                                      CONFIG_TARGET_RESET_VELOCITY_LOAD,
-                                                      CONFIG_GATE_VELOCITY_LOAD,
-                                                      CONFIG_GATE_CURRENT_LOAD,
-                                                      pdMS_TO_TICKS(CONFIG_TIMEOUT_RESET_LOAD),
-                                                      fsm.custom<Dart_FSM>()->ActionResetMotors_Load_1_Reset_State,
-                                                      true) ==
+            success &= actionResetMotorUntilBlocked(motor_controller::MotorLoadController[1],
+                                                    CONFIG_TARGET_RESET_VELOCITY_LOAD,
+                                                    CONFIG_GATE_VELOCITY_LOAD,
+                                                    CONFIG_GATE_CURRENT_LOAD,
+                                                    pdMS_TO_TICKS(CONFIG_TIMEOUT_RESET_LOAD),
+                                                    fsm.custom<Dart_FSM>()->ActionGeneral_Timer2_,
+                                                    fsm.custom<Dart_FSM>()->ActionResetMotors_Load_1_Reset_State,
+                                                    true) ==
                 E_ResetActionReturnState::Finished;
 
-            if (fsm.custom<Dart_FSM>()->lastActionResetMotors_Load_0_Reset_State != 2
-                            && fsm.custom<Dart_FSM>()->lastActionResetMotors_Load_0_Reset_State == 2)
+            if (fsm.custom<Dart_FSM>()->ActionResetMotors_Load_0_Reset_State == 2
+                && fsm.custom<Dart_FSM>()->ActionResetMotors_Load_1_Reset_State == 2
+                && fsm.custom<Dart_FSM>()->ActionResetMotors_both_initialized == false)
             {
-                motor::MotorLoad[0].setNextState(motor::E_MotorState::IDLE);
-                motor::MotorLoad[1].setNextState(motor::E_MotorState::IDLE);
-            }
-
-            if (success)
-            {
+                fsm.custom<Dart_FSM>()->ActionResetMotors_both_initialized = true;
                 motor::MotorLoad[0].resetRound();
                 motor::MotorLoad[1].resetRound();
                 motor_controller::motor_load_sync_offset =
                     motor::MotorLoad[0].current_angle_ - motor::MotorLoad[1].current_angle_;
+                motor::MotorLoad[0].setNextState(motor::E_MotorState::IDLE);
+                motor::MotorLoad[1].setNextState(motor::E_MotorState::IDLE);
+                motor_controller::MotorLoadController[0].target_openloop_ = 0;
+                motor_controller::MotorLoadController[1].target_openloop_ = 0;
+            }
 
+            if (success)
+            {
                 soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_chunriying));
                 fsm.nextAction();
-
             }
-            fsm.custom<Dart_FSM>()->lastActionResetMotors_Load_0_Reset_State
-            = fsm.custom<Dart_FSM>()->ActionResetMotors_Load_0_Reset_State;
-            fsm.custom<Dart_FSM>()->lastActionResetMotors_Load_1_Reset_State
-            = fsm.custom<Dart_FSM>()->ActionResetMotors_Load_1_Reset_State;
         }
-
     };
 
     class ActionReleaseMotors : public OpenFSMAction
@@ -487,8 +484,9 @@ do{                        \
         void enter(OpenFSM& fsm) const override
         {
             dart_launcher_status.dart_state = dart_fsm.openFSM_.
-focusEState();
+                                                       focusEState();
         }
+
         void update(OpenFSM& fsm) const override
         {
             // 将TriggerLS电机移动到初始位置

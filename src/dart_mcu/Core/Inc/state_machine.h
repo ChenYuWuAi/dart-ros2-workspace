@@ -62,8 +62,7 @@ namespace state_machine {
         // ActionResetMotors
         uint8_t ActionResetMotors_Load_0_Reset_State = 0;
         uint8_t ActionResetMotors_Load_1_Reset_State = 0;
-        uint8_t lastActionResetMotors_Load_0_Reset_State = 0;
-        uint8_t lastActionResetMotors_Load_1_Reset_State = 0;
+        uint8_t ActionResetMotors_both_initialized = 0;
         uint8_t ActionResetMotors_TriggerLS_Reset_State = 0;
         uint8_t ActionMatch_Launch_State = 0;
         TickType_t ActionGeneral_Timer0_;

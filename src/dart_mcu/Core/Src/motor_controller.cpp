@@ -9,6 +9,7 @@
 if (motor_.motor_state_ == motor::RUNNING) { \
 motor_.setCurrent(motor_controller_.update()); \
 } else { \
+motor_.target_current_=0; \
 motor_controller_.reset(); \
 }
 
@@ -176,10 +177,11 @@ namespace motor_controller {
             } {
                 // 更新同步控制器
                 MotorLoadSyncController.update(motor_controller::MotorLoadController[0].current_angle_with_rounds_ -
-                                               motor_controller::MotorLoadController[1].current_angle_with_rounds_ + motor_load_sync_offset);
+                                               motor_controller::MotorLoadController[1].current_angle_with_rounds_ - motor_load_sync_offset);
             }
             vTaskDelayUntil(&xLastWakeTime, 1);
         }
+
         vTaskDelete(nullptr);
     }
 }
