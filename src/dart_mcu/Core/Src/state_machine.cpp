@@ -246,11 +246,11 @@ do{                        \
     public:
         void enter(OpenFSM& fsm) const override
         {
-            //            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_bokuranomachi));
+            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_bokuranomachi));
             enableLoadServo();
             setLoadServotoUP();
             setTriggerServotoReload();
-            enableTriggerServo();9
+            enableTriggerServo();
             enableSlidedownServo();
 
             dart_launcher_status.dart_state = dart_fsm.openFSM_.focusEState();
@@ -375,11 +375,11 @@ do{                        \
                 if (xTaskGetTickCount() - last_time > timeout_)
                 {
                     // 停止电机，复原状态
-                    if (openloop_)
-                        controller_.target_openloop_ = 0;
-                    else
+                    if (!openloop_)
+                    //     controller_.target_openloop_ = 0;
+                    // else
                         controller_.target_velocity_ = 0;
-                    // controller_.motor_->setNextState(motor::E_MotorState::IDLE);
+                    // controller_.motor_->setNextStXXate(motor::E_MotorState::IDLE);
                     running_flag_ = false;
                     controller_.motor_->resetRound();
                     running_flag_ = 2;
@@ -455,6 +455,13 @@ do{                        \
                                                       true) ==
                 E_ResetActionReturnState::Finished;
 
+            if (fsm.custom<Dart_FSM>()->lastActionResetMotors_Load_0_Reset_State != 2
+                            && fsm.custom<Dart_FSM>()->lastActionResetMotors_Load_0_Reset_State == 2)
+            {
+                motor::MotorLoad[0].setNextState(motor::E_MotorState::IDLE);
+                motor::MotorLoad[1].setNextState(motor::E_MotorState::IDLE);
+            }
+
             if (success)
             {
                 motor::MotorLoad[0].resetRound();
@@ -464,8 +471,14 @@ do{                        \
 
                 soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_chunriying));
                 fsm.nextAction();
+
             }
+            fsm.custom<Dart_FSM>()->lastActionResetMotors_Load_0_Reset_State
+            = fsm.custom<Dart_FSM>()->ActionResetMotors_Load_0_Reset_State;
+            fsm.custom<Dart_FSM>()->lastActionResetMotors_Load_1_Reset_State
+            = fsm.custom<Dart_FSM>()->ActionResetMotors_Load_1_Reset_State;
         }
+
     };
 
     class ActionReleaseMotors : public OpenFSMAction
@@ -980,7 +993,6 @@ focusEState();
 
             setLoadServotoUP();
 
-
             dart_launcher_status.dart_state = dart_fsm.openFSM_.focusEState() + 0;
         }
 
@@ -1192,7 +1204,7 @@ focusEState();
             motor::MotorYawLS.setNextState(motor::E_MotorState::RUNNING);
             motor::MotorTriggerLS.setNextState(motor::E_MotorState::RUNNING);
 
-            // 控制器模式：Yawgger均为角/Tri度 Load为速度
+            // 控制器模式：Yaw/Trigger均为角度 Load为速度
             motor_controller::MotorYawLSController.set_state(
                 motor_controller::E_PID_Velocity_Angle_Controller_State::ANGLE_CONTROL);
             motor_controller::MotorTriggerLSController.set_state(
