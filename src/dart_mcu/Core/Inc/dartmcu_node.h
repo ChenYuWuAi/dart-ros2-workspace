@@ -51,7 +51,7 @@ void timer_callback(rcl_timer_t *timer, int64_t last_call_time);
 
 void subscription_buzzer_callback(const void *msgin);
 
-void subscription_servo_callback(const void *msgin);
+void subscription_protocol_setting_callback(const void *msgin);
 
 void subscription_parameter_setting_callback(const void *msgin);
 

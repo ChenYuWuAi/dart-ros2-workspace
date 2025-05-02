@@ -241,9 +241,8 @@ do{                        \
     class ActionWaitForAllMotorOnline : public OpenFSMAction
     {
     public:
-        void enter(OpenFSM& fsm) const override
-        {
-            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_bokuranomachi));
+        void enter(OpenFSM &fsm) const override {
+            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_dont_say_lazy));
             enableLoadServo();
             setLoadServotoUP();
             setTriggerServotoReload();
