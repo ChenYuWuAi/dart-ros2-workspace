@@ -18,6 +18,10 @@ enum song_list {
     Eprotect
 };
 
+static note_t buzzer_warn[] = {
+        {659,  82},
+};
+
 static note_t buzzer_dont_say_lazy[] = {
         {0,    331},
         {659,  82},

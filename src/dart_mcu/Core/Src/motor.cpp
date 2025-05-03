@@ -80,7 +80,7 @@ namespace motor {
      */
     int16_t motor_rm::updateCurrent() {
         // Check Disconnect
-        if (xTaskGetTickCount() - last_update_time_ > 1000) {
+        if (xTaskGetTickCount() - last_update_time_ > 5000) {
             motor_state_ = (DISCONNECTED);
         } else if (motor_state_ == DISCONNECTED) {
             motor_state_ = (IDLE);

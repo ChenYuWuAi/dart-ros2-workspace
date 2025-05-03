@@ -9,8 +9,8 @@
 if (motor_.motor_state_ == motor::RUNNING) { \
 motor_.setCurrent(motor_controller_.update()); \
 } else { \
-motor_.target_current_=0; \
 motor_controller_.reset(); \
+motor_.target_current_=0; \
 }
 
 namespace motor_controller {
