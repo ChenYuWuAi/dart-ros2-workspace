@@ -1058,6 +1058,7 @@ do{                        \
             if (fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire)
             {
                 fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = false;
+                soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_winxp));
                 fsm.nextAction();
                 return;
             }
@@ -1168,6 +1169,7 @@ do{                        \
 #endif
 
             if (launch_grant_)
+                dart_mcu_log("Launch granted ,from ;!");
                 fsm.nextAction();
         }
 
