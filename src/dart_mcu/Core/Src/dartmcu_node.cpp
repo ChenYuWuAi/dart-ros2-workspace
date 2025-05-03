@@ -146,7 +146,7 @@ void microros_node_task(void) {
 
     xTaskCreate(state_machine::fsm_thread, "fsm_thread", 256, NULL, 11, NULL);
 
-    xTaskCreate(motor_controller::pid_control_task, "pid_control_task", 256, NULL, 12, NULL);
+    xTaskCreate(motor_controller::pid_control_task, "pid_control_task", 256, NULL, 25, NULL);
 
     set_ros_transport();
     state = WAITING_AGENT;
@@ -290,7 +290,7 @@ bool create_entities() {
             &subscriber_greenlight,
             &node,
             ROSIDL_GET_MSG_TYPE_SUPPORT(dart_msgs, msg, GreenLight),
-            "/dart_launcher_detector/result/green_light"))
+            "/dart_launcher_detector/results/greenlight"))
 
     // create timer,
     const unsigned int timer_logger_timeout = 100;
