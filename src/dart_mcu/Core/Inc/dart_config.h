@@ -6,7 +6,9 @@
 #define DART_MCU_DART_CONFIG_H
 
 #include "stdint.h"
-#include "dart_launcher_param.h"
+#include "dart_msgs/msg/dart_launcher_params.h"
+#include "dart_msgs/msg/dart_launcher_status.h"
+#include "dart_msgs/msg/green_light.h"
 
 // 比赛模式相关
 #define CONFIG_FORCE_WAIT_FOR_GAME_PROGRESS 0
@@ -54,7 +56,7 @@
 #define CONFIG_MOTOR_LOAD_ANGLE_MAX 8192
 
 // 特殊电机角度定义
-#define CONFIG_MOTOR_LOAD_ANGLE_LAUNCH 115000
+#define CONFIG_MOTOR_LOAD_ANGLE_LAUNCH 25000
 #define CONFIG_MOTOR_LOAD_ANGLE_UP 115000
 #define CONFIG_MOTOR_LOAD_ANGLE_POST_LOAD 400000
 #define CONFIG_MOTOR_LOAD_ANGLE_DOWN 1070000
@@ -67,7 +69,8 @@
 // 队列长度
 #define LOG_QUEUE_LEN 10
 
-extern DartLauncherParams dart_launcher_params;
-extern DartLauncherStatus dart_launcher_status;
+extern dart_msgs__msg__DartLauncherParams msgDartParams;
+extern dart_msgs__msg__GreenLight msgGreenLight;
+extern dart_msgs__msg__DartLauncherStatus msgDartStatus;
 
 #endif //DART_MCU_DART_CONFIG_H

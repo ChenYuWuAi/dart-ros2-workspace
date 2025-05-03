@@ -8,7 +8,7 @@
 #include "openfsm.h"
 #include "stdint.h"
 #include "FreeRTOS.h"
-#include "dart_launcher_param.h"
+#include "dartmcu_node.h"
 
 using namespace openfsm;
 

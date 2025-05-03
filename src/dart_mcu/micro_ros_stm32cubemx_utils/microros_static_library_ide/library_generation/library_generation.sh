@@ -24,10 +24,12 @@ else
 fi
 
 ######## Init ########
-apt-get update
+#apt-get update
 apt-get install -y gcc-arm-none-eabi
 
 cd /uros_ws
+
+rm -rf ./firmware
 
 source /opt/ros/$ROS_DISTRO/setup.bash
 source install/local_setup.bash
