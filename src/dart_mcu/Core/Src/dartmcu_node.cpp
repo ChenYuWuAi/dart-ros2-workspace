@@ -327,6 +327,7 @@ bool create_entities() {
     RCSOFTCHECK(rclc_executor_add_subscription(&executor, &subscriber_parameter, &msgDartParams,
                                                &subscription_parameter_setting_callback,
                                                ON_NEW_DATA));
+    // TODO:完成与上位机关于Yaw轴自瞄的通信
     RCSOFTCHECK(rclc_executor_add_subscription(&executor, &subscriber_greenlight, &msgGreenLight,
                                                &subscription_parameter_setting_callback,
                                                ON_NEW_DATA));

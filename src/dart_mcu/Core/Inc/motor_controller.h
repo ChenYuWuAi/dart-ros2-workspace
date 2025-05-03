@@ -70,6 +70,7 @@ namespace motor_controller {
     extern pid_angle_velocity_controller<double> MotorTriggerLSController;
     extern pid_angle_velocity_controller<double> MotorYawLSController;
     extern pid_angle_velocity_controller<double> MotorLoadController[2];
+    extern pid_angle_velocity_controller<double> AutoSightController;
 
     extern pid_controller<double> MotorLoadSyncController;
 

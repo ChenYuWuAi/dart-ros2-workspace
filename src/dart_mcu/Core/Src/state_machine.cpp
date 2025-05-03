@@ -968,6 +968,7 @@ do{                        \
             motor_controller::MotorLoadController[1].set_state(
                     motor_controller::E_PID_Velocity_Angle_Controller_State::VELOCITY_CONTROL);
 
+            // TODO:计算primary_yaw_offset的值，并进行调试
 
             motor_controller::MotorTriggerLSController.target_angle_with_rounds_ =
                     msgDartParams.primary_force + msgDartParams.primary_force_offset;
@@ -1129,9 +1130,9 @@ do{                        \
                     setTriggerServotoTrigger();
                     base_velocity = -CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
                     if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
-                        CONFIG_MOTOR_LOAD_ANGLE_UP ||
+                        CONFIG_MOTOR_LOAD_ANGLE_LAUNCH ||
                         motor_controller::MotorLoadController[1].current_angle_with_rounds_ <= -
-                                CONFIG_MOTOR_LOAD_ANGLE_UP) {
+                                CONFIG_MOTOR_LOAD_ANGLE_LAUNCH) {
                         // TODO: 删掉这一测试动作
                         setTriggerServotoReload();
                         fsm.custom<Dart_FSM>()->ActionMatch_Launch_State = 2;
