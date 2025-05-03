@@ -84,7 +84,7 @@ namespace LED {
         for (int i = 0; i < 8; i++) {
             setLED((LED_Type) (LED_FLOW_0 + i), led_state_[i]);
         }
-        xTaskCreate(flowTask, "LED_Flow", 64, this, 10, nullptr);
+        xTaskCreate(flowTask, "LED_Flow", 64, this, 18, nullptr);
     }
 
     void LED_Flow::updateStatetoLED() {

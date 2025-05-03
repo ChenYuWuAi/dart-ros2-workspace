@@ -24,17 +24,19 @@
 #include "queue.h"
 #include "semphr.h"
 
-#define RCCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){return false;}}
+#define RCCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_error));return false;}}
 #define EXECUTE_EVERY_N_MS(MS, X)  do { \
     static volatile int64_t init = -1; \
     if (init == -1) { init = uxr_millis();} \
     if (uxr_millis() - init > MS) { X; init = uxr_millis();} \
   } while (0)
-#define RCSOFTCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){}}
+#define RCSOFTCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){ \
+soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_error));                   \
+return false; }}
 
 typedef struct velocity_meter_result_t{
     double velocity;
-    bool is_valid;
+    TickType_t record_time;
 }velocity_meter_result_t;
 
 extern velocity_meter_result_t velocity_meter_result;
@@ -47,7 +49,7 @@ void set_ros_transport();
 
 void destroy_entities();
 
-void timer_callback(rcl_timer_t *timer, int64_t last_call_time);
+void timer_logger_callback(rcl_timer_t *timer, int64_t last_call_time);
 
 void subscription_buzzer_callback(const void *msgin);
 
@@ -59,7 +61,7 @@ void subscription_parameter_setting_callback(const void *msgin);
 void dart_mcu_log(char * msg);
 
 extern rcl_allocator_t allocator;
-extern rcl_publisher_t publisher;
+extern rcl_publisher_t publisher_logger;
 extern rcl_node_t node;
 extern rclc_support_t support;
 extern rcl_timer_t timer;

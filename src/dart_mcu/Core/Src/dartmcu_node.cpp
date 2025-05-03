@@ -52,7 +52,7 @@ rcl_subscription_t subscriber_buzzer = rcl_get_zero_initialized_subscription();
 rcl_subscription_t subscriber_protocol = rcl_get_zero_initialized_subscription();
 rcl_subscription_t subscriber_parameter = rcl_get_zero_initialized_subscription();
 rcl_subscription_t subscriber_greenlight = rcl_get_zero_initialized_subscription();
-rcl_publisher_t publisher = rcl_get_zero_initialized_publisher();
+rcl_publisher_t publisher_logger = rcl_get_zero_initialized_publisher();
 rcl_publisher_t publisher_can = rcl_get_zero_initialized_publisher();
 rcl_node_t node;
 rclc_support_t support;
@@ -81,7 +81,7 @@ void *microros_zero_allocate(size_t number_of_elements, size_t size_of_element, 
 
 void publish_velocity_meter_result(void *arg) {
     while (1) {
-        vTaskDelay(100);
+        vTaskSuspend(nullptr);
     }
 }
 
@@ -106,7 +106,7 @@ void microros_node_task(void) {
 
     meter::velocity_meter.begin(&htim8, TIM_CHANNEL_1, &htim8, TIM_CHANNEL_2, 65536, [=](float velocity) {
         velocity_meter_result.velocity = velocity;
-        velocity_meter_result.is_valid = true;
+        velocity_meter_result.record_time = xTaskGetTickCount();
         dart_launcher_status.last_launch_speed = velocity_meter_result.velocity;
 //        dart_launcher_status.last_launch_time = rmw_uros_epoch_millis();
 //        static char log[20];
@@ -125,15 +125,15 @@ void microros_node_task(void) {
     set_ros_transport();
     state = WAITING_AGENT;
 
-//    rcl_allocator_t freeRTOS_allocator = rcutils_get_zero_initialized_allocator();
-//    freeRTOS_allocator.allocate = microros_allocate;
-//    freeRTOS_allocator.deallocate = microros_deallocate;
-//    freeRTOS_allocator.reallocate = microros_reallocate;
-//    freeRTOS_allocator.zero_allocate = microros_zero_allocate;
-//
-//    if (!rcutils_set_default_allocator(&freeRTOS_allocator)) {
-//        printf("Error on default allocators (line %d)\n", __LINE__);
-//    }
+    rcl_allocator_t freeRTOS_allocator = rcutils_get_zero_initialized_allocator();
+    freeRTOS_allocator.allocate = microros_allocate;
+    freeRTOS_allocator.deallocate = microros_deallocate;
+    freeRTOS_allocator.reallocate = microros_reallocate;
+    freeRTOS_allocator.zero_allocate = microros_zero_allocate;
+
+    if (!rcutils_set_default_allocator(&freeRTOS_allocator)) {
+        soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_warn));
+    }
 
     while (1) {
         switch (state) {
@@ -157,7 +157,7 @@ void microros_node_task(void) {
                                    state = (RMW_RET_OK == rmw_uros_ping_agent(100, 5)) ? AGENT_CONNECTED
                                                                                        : AGENT_DISCONNECTED;);
                 if (state == AGENT_CONNECTED) {
-                    rclc_executor_spin_some(&executor, RCL_MS_TO_NS(500));
+                    rclc_executor_spin_some(&executor, RCL_MS_TO_NS(1000));
                 } else if (state == AGENT_DISCONNECTED) {
                     soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_remove), false, false);
                     LED::setLED(LED::LED_GREEN, false);
@@ -175,8 +175,9 @@ void microros_node_task(void) {
     }
 };
 
-void timer_callback(rcl_timer_t *timer, int64_t last_call_time) {
+void timer_logger_callback(rcl_timer_t *timer, int64_t last_call_time) {
 // 等待信号量，直到有新日志
+    (void) last_call_time;
     if (!timer)
         return;
     // 尝试从队列取出所有消息
@@ -191,7 +192,7 @@ void timer_callback(rcl_timer_t *timer, int64_t last_call_time) {
             memcpy(msgString.data.data, pMsg, len);
             msgString.data.data[len] = '\0';
             msgString.data.size = len + 1;
-            rcl_publish(&publisher, &msgString, nullptr);
+            rcl_publish(&publisher_logger, &msgString, nullptr);
             // 释放连续内存，把字符串和后续内容都删掉
             vPortFree(pMsg);
             xLogQueue.pop();
@@ -204,11 +205,20 @@ void timer2_callback(rcl_timer_t *timer, int64_t last_call_time) {
     if (timer != nullptr) {
         // 序列化镖架状态变量发送
 
-        rcl_publish(&publisher_can, &msgDartParam, nullptr);
+//        rcl_publish(&publisher_can, &msgDartParam, nullptr);
+// 发送velocity
+        static TickType_t last_send_tick = velocity_meter_result.record_time;
+        if (last_send_tick != velocity_meter_result.record_time) {
+            char buf[20];
+            snprintf(buf, 20, "velocity: %.2f", velocity_meter_result.velocity);
+            dart_mcu_log(buf);
+            last_send_tick = velocity_meter_result.record_time;
+        }
     }
 }
 
 bool create_entities() {
+
     allocator = rcl_get_default_allocator();
 
     // create init_options
@@ -218,8 +228,8 @@ bool create_entities() {
     RCCHECK(rclc_node_init_default(&node, "dart_mcu", "", &support));
 
     // create publisher
-    rclc_publisher_init_default(
-            &publisher,
+    rclc_publisher_init_best_effort(
+            &publisher_logger,
             &node,
             ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
             "/dart_launcher_mcu/log");
@@ -250,13 +260,19 @@ bool create_entities() {
             ROSIDL_GET_MSG_TYPE_SUPPORT(dart_msgs, msg, DartParam),
             "/dart_launcher_mcu/cmd_params"))
 
+    RCSOFTCHECK(rclc_subscription_init_default(
+            &subscriber_greenlight,
+            &node,
+            ROSIDL_GET_MSG_TYPE_SUPPORT(dart_msgs, msg, GreenLight),
+            "/dart_launcher_detector/result/green_light"))
+
     // create timer,
-    const unsigned int timer1_timeout = 100;
+    const unsigned int timer_logger_timeout = 100;
     RCCHECK(rclc_timer_init_default2(
             &timer,
             &support,
-            RCL_MS_TO_NS(timer1_timeout),
-            timer_callback, true));
+            RCL_MS_TO_NS(timer_logger_timeout),
+            timer_logger_callback, true));
 
     const unsigned int timer2_timeout = 100;
     RCCHECK(rclc_timer_init_default2(
@@ -296,11 +312,13 @@ void destroy_entities() {
     rmw_context_t *rmw_context = rcl_context_get_rmw_context(&support.context);
     (void) rmw_uros_set_context_entity_destroy_session_timeout(rmw_context, 0);
 
-    rcl_publisher_fini(&publisher, &node);
+    rcl_publisher_fini(&publisher_logger, &node);
     rcl_publisher_fini(&publisher_can, &node);
     rcl_timer_fini(&timer);
+    rcl_timer_fini(&timer2);
     rcl_subscription_fini(&subscriber_buzzer, &node);
     rcl_subscription_fini(&subscriber_protocol, &node);
+    rcl_subscription_fini(&subscriber_parameter, &node);
     rcl_subscription_fini(&subscriber_greenlight, &node);
     rclc_executor_fini(&executor);
     rcl_node_fini(&node);
@@ -354,28 +372,28 @@ state_machine::UpsideState state_machine::upside_state = state_machine::UpsideSt
 void subscription_protocol_setting_callback(const void *msgin) {
     const std_msgs__msg__Int32 *msg = (const std_msgs__msg__Int32 *) msgin;
 
-    if (msgin != NULL) {
-        // Limit the angle
-        int angle = msg->data;
-        if (angle == 0) {
-            trigger_servo[0].setAngle(CONFIG_TRIGGER_SERVO_TRIGGER_ANGLE_0);
-            trigger_servo[1].setAngle(CONFIG_TRIGGER_SERVO_TRIGGER_ANGLE_1);
-        } else if (angle == 1) {
-            trigger_servo[0].setAngle(CONFIG_TRIGGER_SERVO_RELOAD_ANGLE_0);
-            trigger_servo[1].setAngle(CONFIG_TRIGGER_SERVO_RELOAD_ANGLE_1);
-        } else if (angle == 2) {
-            state_machine::upside_state = state_machine::UpsideState::MovingDown;
-        } else if (angle == 3) {
-            state_machine::upside_state = state_machine::UpsideState::MovingUp;
-        } else if (angle == 4) {
+//    if (msgin != NULL) {
+//        // Limit the angle
+//        int angle = msg->data;
+//        if (angle == 0) {
+//            trigger_servo[0].setAngle(CONFIG_TRIGGER_SERVO_TRIGGER_ANGLE_0);
+//            trigger_servo[1].setAngle(CONFIG_TRIGGER_SERVO_TRIGGER_ANGLE_1);
+//        } else if (angle == 1) {
+//            trigger_servo[0].setAngle(CONFIG_TRIGGER_SERVO_RELOAD_ANGLE_0);
+//            trigger_servo[1].setAngle(CONFIG_TRIGGER_SERVO_RELOAD_ANGLE_1);
+//        } else if (angle == 2) {
+//            state_machine::upside_state = state_machine::UpsideState::MovingDown;
+//        } else if (angle == 3) {
+//            state_machine::upside_state = state_machine::UpsideState::MovingUp;
+//        } else if (angle == 4) {
+//
+//        }
 
-        }
-
-        trigger_servo[0].enable();
-        trigger_servo[1].enable();
+//        trigger_servo[0].enable();
+//        trigger_servo[1].enable();
 //    trigger_servo[0].setAngle(angle);
 //    trigger_servo[1].setAngle(angle);
-    }
+//    }
 }
 
 void subscription_parameter_setting_callback(const void *msgin) {
