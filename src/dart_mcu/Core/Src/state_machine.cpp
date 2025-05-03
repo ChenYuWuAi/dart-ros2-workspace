@@ -28,7 +28,7 @@ namespace state_machine {
 #define enterProtectModeIfMotorDisconnected() \
 do { \
 if (dart_fsm.openFSM_.focusEState() != E_Dart_State::Protect && anyMotorDisconnected){ \
-dart_fsm.openFSM_.enterState(E_Dart_State::Protect);                                   \
+dart_fsm.openFSM_.nextState(E_Dart_State::Protect);                                   \
 dart_mcu_log("Enter Protect: Motor Disconnected");                                              \
 } \
 } while (0)
@@ -131,16 +131,18 @@ do{                        \
     uint16_t last_dart_launch_time_ = 0; // 上一次发射指令下达时间
     bool match_flag_ = 0; // 上场比赛判断 若已经上场则执行最严格的安全措施
 
-    bool isRemoteOnline() {
-        return (xTaskGetTickCount() - RC_Data.last_update_time) < 1000;
+    bool isRemoteOnline(TickType_t current_tick) {
+        return (current_tick < RC_Data.last_update_time) || (current_tick - RC_Data.last_update_time) < 1000;
     }
 
     void setNextStateByRemote(bool enterProtectIfDisconnected = true, bool inMatch = false) {
         // 通过遥控器设置状态机状态
         E_Dart_State next_state = E_Dart_State::Protect;
 
+        TickType_t current_tick = xTaskGetTickCount();
+
         if (inMatch) {
-            if (isRemoteOnline()) {
+            if (isRemoteOnline(current_tick)) {
                 if (RC_Data.Switch_Right == RC_SW_UP) {
                     next_state = E_Dart_State::Protect;
                 } else if (RC_Data.Switch_Right == RC_SW_DOWN || RC_Data.Switch_Right == RC_SW_MID) {
@@ -148,7 +150,7 @@ do{                        \
                 }
             }
         } else {
-            if (isRemoteOnline()) {
+            if (isRemoteOnline(current_tick)) {
                 if (RC_Data.Switch_Right == RC_SW_UP) {
                     next_state = E_Dart_State::Protect;
                 } else if (RC_Data.Switch_Right == RC_SW_DOWN) {
@@ -158,12 +160,13 @@ do{                        \
                 }
             } else if (enterProtectIfDisconnected) {
                 next_state = E_Dart_State::Protect;
+                dart_mcu_log("Enter Protect: Remote Disconnected");
             }
             enterProtectModeIfMotorDisconnected();
         }
 
         if (next_state != dart_fsm.openFSM_.focusEState() && !anyMotorDisconnected) {
-            if(!isRemoteOnline())
+            if (!isRemoteOnline(current_tick))
                 dart_mcu_log("Enter Protect: Remote Disconnected");
             dart_fsm.openFSM_.nextState(next_state);
         }
@@ -201,7 +204,7 @@ do{                        \
         msgDartStatus.motor_trigger_online =
                 motor::MotorTriggerLS.motor_state_ != motor::E_MotorState::DISCONNECTED;
         msgDartStatus.judge_online = !(xTaskGetTickCount() - ext_judge_last_receive_time > pdMS_TO_TICKS(1000));
-        msgDartStatus.rc_online = isRemoteOnline();
+        msgDartStatus.rc_online = isRemoteOnline(xTaskGetTickCount());
         msgDartStatus.dart_state = openFSM_.focusEState();
         msgDartStatus.motor_yaw_angle = motor_controller::MotorYawLSController.current_angle_with_rounds_;
         msgDartStatus.motor_trigger_angle =
