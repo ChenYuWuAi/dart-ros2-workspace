@@ -968,8 +968,7 @@ do{                        \
             motor_controller::MotorLoadController[1].set_state(
                     motor_controller::E_PID_Velocity_Angle_Controller_State::VELOCITY_CONTROL);
 
-            // TODO:计算primary_yaw_offset的值，并进行调试
-
+            // TODO:计算好primary_yaw_offset的值，并进行调试
             motor_controller::MotorTriggerLSController.target_angle_with_rounds_ =
                     msgDartParams.primary_force + msgDartParams.primary_force_offset;
 

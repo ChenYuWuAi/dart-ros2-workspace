@@ -424,13 +424,28 @@ void subscription_protocol_setting_callback(const void *msgin) {
 }
 
 void subscription_parameter_setting_callback(const void *msgin) {
-    const auto *msg = (const dart_msgs__msg__DartLauncherParams *) msgin;
+    // const auto *msg = (const dart_msgs__msg__DartLauncherParams *) msgin;
+    const auto *msg = (const dart_msgs__msg__GreenLight *) msgin;
     if (msgin != NULL) {
 //        int32_t *data = msg->data.data;
 //        motor_controller::MotorYawLSController.target_angle_with_rounds_ = data[0];
 //        dart_launcher_params.primary_yaw = data[0];
 //        motor_controller::MotorTriggerLSController.target_angle_with_rounds_ = data[1];
 //        dart_launcher_params.primary_force = data[1];
+        // 更新时间戳
+        static uint32_t last_greenlight_update_time = xTaskGetTickCount();
+        // 记录 msgGreenLight 的信息（如 x 坐标）
+        if (msg->is_detected
+            && xTaskGetTickCount() - last_greenlight_update_time < 200) {
+            if (abs(msg->location.x - msgDartParams.target_auto_aim_x_axis) > 5)
+                msgDartParams.primary_yaw_offset = motor_controller::AutoAimController.update(
+                    msg->location.x - msgDartParams.target_auto_aim_x_axis);
+            dart_mcu_log("GreenLight detected.");
+        } else {
+            dart_mcu_log("GreenLight not detected.");
+            msgDartParams.primary_yaw_offset = 0;
+        }
+        last_greenlight_update_time = xTaskGetTickCount();
     }
 }
 

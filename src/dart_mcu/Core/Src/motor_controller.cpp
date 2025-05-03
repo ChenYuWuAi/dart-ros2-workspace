@@ -45,12 +45,9 @@ namespace motor_controller
 
     };
 
-    pid_angle_velocity_controller<double> AutoSightController (
-        pid_controller<double>(0.1, 0.01, 0.01, 100, 100, 100, 1000),
-        pid_controller<double>(0.1, 0.01, 0.01, 100, 100, 100, 1000),
-        &motor::MotorLoad[0],
-    VELOCITY_CONTROL
-    );
+
+    pid_controller<double> AutoAimController = pid_controller<double>(0.05, 0.0, 0.0, 1000.0, 500.0, 300.0,
+                                                                            1000.0);
 
     double motor_load_sync_offset = 0;
     pid_controller<double> MotorLoadSyncController = pid_controller<double>(0.05, 0.07, 0.1, 1000.0, 500.0, 300.0,
