@@ -340,8 +340,8 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
     }
     else
     {
-        RCLCPP_WARN(this->get_logger(), "QR code detector binary threshold not set, using default value 200.");
-        qr_detector_.setBinaryThreshold(200);
+        RCLCPP_WARN(this->get_logger(), "QR code detector binary threshold not set, using default value 39.");
+        qr_detector_.setBinaryThreshold(39);
     }
 
     if (!greenlight_detector_)

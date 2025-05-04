@@ -31,6 +31,6 @@
         param1: 24
         param2: 24
       qr_detect:
-        binThreshold: 21
+        binThreshold: 39
         save_image:
           enable: false
