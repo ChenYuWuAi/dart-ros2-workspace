@@ -7,11 +7,11 @@
       camera_params:
         Resolution: [1640, 1232]
     dh:
-      enable: false
+      enable: true
       image_width: 1280
       image_height: 1024
       camera_params:
-        FPS: 30
+        FPS: 15
         ExposureTime: 30
         Gain: 1.0
         Gamma: 1.0
@@ -31,5 +31,6 @@
         param1: 24
         param2: 24
       qr_detect:
+        binThreshold: 21
         save_image:
           enable: false

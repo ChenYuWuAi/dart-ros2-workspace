@@ -31,9 +31,9 @@ private:
     std::shared_ptr<TopArmorDetect> greenlight_detector_;
 
     rclcpp_lifecycle::LifecyclePublisher<dart_msgs::msg::GreenLight>::SharedPtr greenlight_publisher_;
-    rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::Image>::SharedPtr greenlight_image_publisher_;
+    rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::CompressedImage>::SharedPtr greenlight_image_publisher_;
     rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::String>::SharedPtr qr_detect_publisher_;
-    rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::Image>::SharedPtr qr_image_publisher_;
+    rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::CompressedImage>::SharedPtr qr_image_publisher_;
 
     std::shared_ptr<std::thread> lccv_thread_;
     std::shared_ptr<std::thread> dh_thread_;

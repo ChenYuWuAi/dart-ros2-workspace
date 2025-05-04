@@ -26,6 +26,30 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDartParamGateway::on_activate(const rclcpp_lifecycle::State &previous_state)
 {
     RCLCPP_INFO(get_logger(), "NodeDartParamGateway on_activate");
+    // Create Publisher and subscriber
+    dart_param_pub_ = this->create_publisher<dart_msgs::msg::DartLauncherParams>(
+        "/dart_launcher_mcu/cmd_params", rclcpp::QoS(10).durability_volatile().reliable());
+
+    dart_param_sub_ = this->create_subscription<dart_msgs::msg::DartLauncherParams>(
+        "/dart_launcher_mcu/params", rclcpp::QoS(10).durability_volatile().best_effort(),
+        [this](const dart_msgs::msg::DartLauncherParams::SharedPtr msg)
+        {
+            current_dart_param_ = *msg;
+        });
+
+    dart_qr_param_sub_ = this->create_subscription<std_msgs::msg::String>(
+        "/dart_launcher_detector/results/qrcode", rclcpp::QoS(10).durability_volatile().best_effort(),
+        [this](const std_msgs::msg::String::SharedPtr msg)
+        {
+            // Parse the JSON string
+            json j = json::parse(msg->data);
+            // 遍历并打印json键值
+            for (auto it = j.begin(); it != j.end(); ++it)
+            {
+                RCLCPP_INFO(get_logger(), "Key: %s, Value: %s", it.key().c_str(), it.value().dump().c_str());
+            }
+        });
+
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
 

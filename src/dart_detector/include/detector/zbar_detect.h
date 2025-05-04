@@ -17,7 +17,7 @@ public:
      * @param inputImage 输入的OpenCV图像 (cv::Mat)
      * @return 检测到的二维码数据列表 (std::vector<std::string>)
      */
-    std::vector<std::string> detect(const cv::Mat &inputImage);
+    std::vector<std::string> detect(cv::Mat &inputImage);
 
     /**
      * @brief 设置二值化阈值

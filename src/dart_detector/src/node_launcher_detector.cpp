@@ -70,14 +70,19 @@ void NodeDartLauncherDetector::camera_thread(std::shared_ptr<CameraDriver> camer
 
             std_msgs::msg::Header header;
             header.stamp = this->now();
-            auto image_msg = cv_bridge::CvImage(header, "bgr8", image).toImageMsg();
+            auto image_msg = cv_bridge::CvImage(header, "bgr8", image).toCompressedImageMsg();
+
             qr_image_publisher_->publish(*image_msg);
             std::this_thread::sleep_for(16ms);
         }
-        camera->close();
+        qr_image_publisher_->on_deactivate();
+        qr_detect_publisher_->on_deactivate();
     }
     else
     {
+
+        greenlight_publisher_->on_activate();
+        greenlight_image_publisher_->on_activate();
         while (running_ && rclcpp::ok())
         {
             try
@@ -121,12 +126,15 @@ void NodeDartLauncherDetector::camera_thread(std::shared_ptr<CameraDriver> camer
             message.location.z = 0.0;
             greenlight_publisher_->publish(message);
 
-            auto image_msg = cv_bridge::CvImage(std_msgs::msg::Header(), "bgr8", image).toImageMsg();
-            greenlight_image_publisher_->publish(*image_msg);
+            std_msgs::msg::Header header;
+            header.stamp = this->now();
 
-            std::this_thread::sleep_for(16ms);
+            auto image_msg = cv_bridge::CvImage(header, "bgr8", resultImg).toCompressedImageMsg();
+            greenlight_image_publisher_->publish(*image_msg);
         }
-        camera->close();
+
+        greenlight_publisher_->on_deactivate();
+        greenlight_image_publisher_->on_deactivate();
     }
     RCLCPP_INFO(this->get_logger(), "Thread for %s camera stopped.", camera_name.c_str());
 }
@@ -276,7 +284,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
         {
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::FAILURE;
         }
-        qr_image_publisher_ = this->create_publisher<sensor_msgs::msg::Image>("/dart_launcher_detector/image/qrcode", 10);
+        qr_image_publisher_ = this->create_publisher<sensor_msgs::msg::CompressedImage>("/dart_launcher_detector/image/qrcode", 10);
         qr_detect_publisher_ = this->create_publisher<std_msgs::msg::String>("/dart_launcher_detector/results/qrcode", 10);
     }
 
@@ -287,7 +295,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::FAILURE;
         }
         greenlight_publisher_ = this->create_publisher<dart_msgs::msg::GreenLight>("/dart_launcher_detector/results/greenlight", 10);
-        greenlight_image_publisher_ = this->create_publisher<sensor_msgs::msg::Image>("/dart_launcher_detector/image/greenlight_processed", 10);
+        greenlight_image_publisher_ = this->create_publisher<sensor_msgs::msg::CompressedImage>("/dart_launcher_detector/image/greenlight_processed", 10);
     }
 
     // 初始化检测器，从参数中加载配置
@@ -323,6 +331,19 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
         }
     }
 
+    // 设置QR码检测器参数
+    if (this->has_parameter("detect.qr_detect.binThreshold"))
+    {
+        int binThreshold = this->get_parameter("detect.qr_detect.binThreshold").as_int();
+        RCLCPP_INFO(this->get_logger(), "QR Code detector binary threshold set to: %d", binThreshold);
+        qr_detector_.setBinaryThreshold(binThreshold);
+    }
+    else
+    {
+        RCLCPP_WARN(this->get_logger(), "QR code detector binary threshold not set, using default value 200.");
+        qr_detector_.setBinaryThreshold(200);
+    }
+
     if (!greenlight_detector_)
     {
         RCLCPP_ERROR(this->get_logger(), "Failed to initialize greenlight detector.");
@@ -330,40 +351,47 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
     }
     RCLCPP_INFO(this->get_logger(), "Greenlight detector initialized successfully.");
 
-    RCLCPP_INFO(this->get_logger(), "Adding parameter event callback...");
+    try
+    {
 
-    callback_set_parameter_handle = this->add_post_set_parameters_callback(
-        [this](const std::vector<rclcpp::Parameter> &params) -> rcl_interfaces::msg::SetParametersResult
-        {
-            for (const auto &param : params)
-            {
-                RCLCPP_INFO(this->get_logger(), "Parameter update: %s", param.get_name().c_str());
-                on_parameter_event(param);
-            }
-            // 如果处于激活状态，则重新配置节点
-            if (this->get_current_state().label() == "active")
-            {
-                RCLCPP_INFO(this->get_logger(), "Reconfiguring node due to parameter change...");
-                this->deactivate();
-                this->cleanup();
-                this->configure();
-                this->activate();
-            }
-            else if (this->get_current_state().label() == "inactive")
-            {
-                RCLCPP_INFO(this->get_logger(), "Node not active, reconfiguring...");
-                this->cleanup();
-                this->configure();
-            }
-            else
-            {
-                RCLCPP_INFO(this->get_logger(), "Node is not active and no reconfiguration needed.");
-            }
-            rcl_interfaces::msg::SetParametersResult result;
-            result.successful = true;
-            return result;
-        });
+        RCLCPP_INFO(this->get_logger(), "Adding parameter event callback...");
 
+        callback_set_parameter_handle = this->add_post_set_parameters_callback(
+            [this](const std::vector<rclcpp::Parameter> &params) -> rcl_interfaces::msg::SetParametersResult
+            {
+                for (const auto &param : params)
+                {
+                    RCLCPP_INFO(this->get_logger(), "Parameter update: %s", param.get_name().c_str());
+                    on_parameter_event(param);
+                }
+                // 如果处于激活状态，则重新配置节点
+                if (this->get_current_state().label() == "active")
+                {
+                    RCLCPP_INFO(this->get_logger(), "Reconfiguring node due to parameter change...");
+                    this->deactivate();
+                    this->cleanup();
+                    this->configure();
+                    this->activate();
+                }
+                else if (this->get_current_state().label() == "inactive")
+                {
+                    RCLCPP_INFO(this->get_logger(), "Node not active, reconfiguring...");
+                    this->cleanup();
+                    this->configure();
+                }
+                else
+                {
+                    RCLCPP_INFO(this->get_logger(), "Node is not active and no reconfiguration needed.");
+                }
+                rcl_interfaces::msg::SetParametersResult result;
+                result.successful = true;
+                return result;
+            });
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << e.what() << '\n';
+    }
     RCLCPP_INFO(this->get_logger(), "Configuration complete: Cameras, callbacks, publishers and detectors initialized.");
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
@@ -374,13 +402,32 @@ NodeDartLauncherDetector::on_activate(
 {
     RCLCPP_INFO(this->get_logger(), "Activating node...");
     running_ = true;
-    if (lccv_enabled_ && camera_lccv_->isOpened)
+    if (lccv_enabled_)
     {
+        if (camera_lccv_->isOpened)
+        {
+            RCLCPP_INFO(this->get_logger(), "LCCV camera is opened.");
+        }
+        else
+        {
+            RCLCPP_WARN(this->get_logger(), "LCCV camera is not opened. Please reconfigure.");
+
+            return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::FAILURE;
+        }
         lccv_thread_ = std::make_shared<std::thread>(std::bind(&NodeDartLauncherDetector::camera_thread, this, camera_lccv_, "lccv", true));
         RCLCPP_INFO(this->get_logger(), "LCCV camera thread started and detached.");
     }
-    if (dh_enabled_ && camera_dh_->isOpened)
+    if (dh_enabled_)
     {
+        if (camera_dh_->isOpened)
+        {
+            RCLCPP_INFO(this->get_logger(), "DH camera is opened.");
+        }
+        else
+        {
+            RCLCPP_ERROR(this->get_logger(), "DH camera is not opened.");
+            return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::FAILURE;
+        }
         dh_thread_ = std::make_shared<std::thread>(std::bind(&NodeDartLauncherDetector::camera_thread, this, camera_dh_, "dh", false));
         RCLCPP_INFO(this->get_logger(), "DH camera thread started and detached.");
     }
@@ -420,6 +467,8 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
     const rclcpp_lifecycle::State &pre_state)
 {
     RCLCPP_INFO(this->get_logger(), "Cleaning up resources...");
+    camera_lccv_->close();
+    camera_dh_->close();
     camera_lccv_.reset();
     camera_dh_.reset();
     greenlight_publisher_.reset();

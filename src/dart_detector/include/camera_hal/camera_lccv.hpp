@@ -21,7 +21,6 @@ namespace CameraHAL
     {
     private:
         lccv::PiCamera camera; ///< LCCV 相机对象
-        bool isOpened;         ///< 相机是否已打开
     public:
         CameraDriver_LCCV();
         ~CameraDriver_LCCV();

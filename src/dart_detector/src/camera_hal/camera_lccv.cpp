@@ -9,7 +9,10 @@
 #include <string>
 namespace CameraHAL
 {
-    CameraDriver_LCCV::CameraDriver_LCCV() : isOpened(false) {}
+    CameraDriver_LCCV::CameraDriver_LCCV()
+    {
+        isOpened = false;
+    }
 
     CameraDriver_LCCV::~CameraDriver_LCCV()
     {
@@ -36,7 +39,6 @@ namespace CameraHAL
         try
         {
             camera.startVideo();
-            isOpened = true;
         }
         catch (const std::exception &e)
         {
@@ -44,6 +46,7 @@ namespace CameraHAL
             return false;
         }
 
+        isOpened = true;
         return true;
     }
 
@@ -128,6 +131,8 @@ namespace CameraHAL
             std::cerr << "Failed to stop LCCV camera: " << e.what() << std::endl;
             return false;
         }
+
+        std::cout << "LCCV camera stopped successfully." << std::endl;
 
         isOpened = false;
 
