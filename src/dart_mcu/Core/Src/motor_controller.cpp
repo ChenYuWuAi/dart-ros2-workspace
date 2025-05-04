@@ -13,8 +13,9 @@ motor_controller_.reset(); \
 motor_.target_current_=0; \
 }
 
-namespace motor_controller {
-    pid_angle_velocity_controller<double> MotorTriggerLSController(
+namespace motor_controller
+{
+     pid_angle_velocity_controller<double> MotorTriggerLSController(
         pid_controller<double>(10, 0.2, 0.01, 10000, 5000, 5000, 6000),
         pid_controller<double>(0.1, 0.01, 0.01, 100, 10000, 10000, 5000),
         &motor::MotorTriggerLS,
@@ -41,7 +42,12 @@ namespace motor_controller {
             &motor::MotorLoad[1],
             VELOCITY_CONTROL
         )
+
     };
+
+
+    pid_controller<double> AutoAimController = pid_controller<double>(20, 7.0, 0.0, 100000.0, 50000.0, 300000.0,
+                                                                            100000.0);
 
     double motor_load_sync_offset = 0;
     pid_controller<double> MotorLoadSyncController = pid_controller<double>(0.05, 0.07, 0.1, 1000.0, 500.0, 300.0,

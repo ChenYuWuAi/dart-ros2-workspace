@@ -11,12 +11,10 @@
 #include <rcutils/time.h>
 #include <uxr/client/transport.h>
 #include <rmw_microros/rmw_microros.h>
-#include <string.h>
+#include <cstring>
 
 #include <std_msgs/msg/int32.h>
 #include <std_msgs/msg/string.h>
-#include <dart_msgs/msg/dart_param.h>
-#include <dart_msgs/msg/green_light.h>
 #include <buzzer.h>
 #include "buzzer_examples.h"
 #include "dartmcu_node.h"
@@ -53,23 +51,74 @@ rcl_subscription_t subscriber_protocol = rcl_get_zero_initialized_subscription()
 rcl_subscription_t subscriber_parameter = rcl_get_zero_initialized_subscription();
 rcl_subscription_t subscriber_greenlight = rcl_get_zero_initialized_subscription();
 rcl_publisher_t publisher_logger = rcl_get_zero_initialized_publisher();
-rcl_publisher_t publisher_can = rcl_get_zero_initialized_publisher();
+rcl_publisher_t publisher_status = rcl_get_zero_initialized_publisher();
 rcl_node_t node;
 rclc_support_t support;
-rcl_timer_t timer, timer2;
+rcl_timer_t timer_log_update, timer_status_update;
 
 rclc_executor_t executor;
 std_msgs__msg__Int64 msgInt64;
 std_msgs__msg__String msgString;
 
 dart_msgs__msg__GreenLight msgGreenLight;
-dart_msgs__msg__DartParam msgDartParam;
+dart_msgs__msg__DartLauncherParams msgDartParams = {
+        .primary_yaw = 40000,
+        .primary_yaw_offset = 0,
+        .primary_force = 1000000,
+        .primary_force_offset = 0,
+        .auxiliary_yaw_offsets = {0, 0, 0, 0},
+        .auxiliary_force_offsets = {0, 0, 0, 0},
+        .dart_launch_process_offset_begin = 0,
+        .dart_launch_process_offset_end = 3,
+        .auto_aim_enabled = false,
+        .target_auto_aim_x_axis = 640,
+        .last_param_update_time = 0
+};
+
+dart_msgs__msg__DartLauncherParams msgDartProtocols = {
+        .primary_yaw = 40000,
+        .primary_yaw_offset = 0,
+        .primary_force = 1000000,
+        .primary_force_offset = 0,
+        .auxiliary_yaw_offsets = {0, 0, 0, 0},
+        .auxiliary_force_offsets = {0, 0, 0, 0},
+        .dart_launch_process_offset_begin = 0,
+        .dart_launch_process_offset_end = 3,
+        .auto_aim_enabled = false,
+        .target_auto_aim_x_axis = 640,
+        .last_param_update_time = 0
+};
+
+dart_msgs__msg__DartLauncherStatus msgDartStatus = {
+        .motor_yaw_online = false,
+        .motor_loader_online = {false, false},
+        .motor_trigger_online = false,
+        .judge_online = false,
+        .rc_online = false,
+        .dart_state = 0,
+        .dart_launch_process = 0,
+        .motor_yaw_angle = 0,
+        .motor_trigger_angle = 0,
+        .motor_loader_current = {0, 0},
+        .motor_loader_angle = {0, 0},
+        .last_launch_speed = 0.0f,
+        .last_launch_time = 0,
+        .dart_launch_opening_status = 0,
+        .game_progress = 0,
+        .dart_remaining_time = 0,
+        .latest_launch_cmd_time = 0,
+        .stage_remain_time = 0,
+        .params = msgDartParams,
+        .protocols = msgDartProtocols,
+};
 
 char msgString_buf[LOG_BUF_LEN];
 
 velocity_meter_result_t velocity_meter_result;
 
 TaskHandle_t velocity_meter_result_task_handle;
+
+TickType_t last_greenlight_update_time = 0;
 
 extern "C"
 {
@@ -107,12 +156,7 @@ void microros_node_task(void) {
     meter::velocity_meter.begin(&htim8, TIM_CHANNEL_1, &htim8, TIM_CHANNEL_2, 65536, [=](float velocity) {
         velocity_meter_result.velocity = velocity;
         velocity_meter_result.record_time = xTaskGetTickCount();
-        dart_launcher_status.last_launch_speed = velocity_meter_result.velocity;
-//        dart_launcher_status.last_launch_time = rmw_uros_epoch_millis();
-//        static char log[20];
-//        sprintf(log, "velocity: %.2f", velocity);
-//        dart_mcu_log(log);
-//        xTaskNotifyFromISR(velocity_meter_result_task_handle, 0, eNoAction, NULL);
+        msgDartStatus.last_launch_speed = velocity_meter_result.velocity;
     }, 0.116, 0.0000005);
 
     xTaskCreate(publish_velocity_meter_result, "publish_velocity_meter_result", 64, NULL, 1,
@@ -120,7 +164,7 @@ void microros_node_task(void) {
 
     xTaskCreate(state_machine::fsm_thread, "fsm_thread", 256, NULL, 11, NULL);
 
-    xTaskCreate(motor_controller::pid_control_task, "pid_control_task", 256, NULL, 12, NULL);
+    xTaskCreate(motor_controller::pid_control_task, "pid_control_task", 256, NULL, 25, NULL);
 
     set_ros_transport();
     state = WAITING_AGENT;
@@ -200,20 +244,20 @@ void timer_logger_callback(rcl_timer_t *timer, int64_t last_call_time) {
     }
 }
 
-void timer2_callback(rcl_timer_t *timer, int64_t last_call_time) {
+void timer_send_status_callback(rcl_timer_t *timer, int64_t last_call_time) {
     (void) last_call_time;
     if (timer != nullptr) {
         // 序列化镖架状态变量发送
-
-//        rcl_publish(&publisher_can, &msgDartParam, nullptr);
-// 发送velocity
+        // 发送velocity 填充last_launch_time
         static TickType_t last_send_tick = velocity_meter_result.record_time;
         if (last_send_tick != velocity_meter_result.record_time) {
             char buf[20];
             snprintf(buf, 20, "velocity: %.2f", velocity_meter_result.velocity);
             dart_mcu_log(buf);
             last_send_tick = velocity_meter_result.record_time;
+            msgDartStatus.last_launch_time = rmw_uros_epoch_millis();
         }
+        rcl_publish(&publisher_status, &msgDartStatus, nullptr);
     }
 }
 
@@ -228,16 +272,16 @@ bool create_entities() {
     RCCHECK(rclc_node_init_default(&node, "dart_mcu", "", &support));
 
     // create publisher
-    rclc_publisher_init_best_effort(
+    rclc_publisher_init_default(
             &publisher_logger,
             &node,
             ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
             "/dart_launcher_mcu/log");
 
     rclc_publisher_init_best_effort(
-            &publisher_can,
+            &publisher_status,
             &node,
-            ROSIDL_GET_MSG_TYPE_SUPPORT(dart_msgs, msg, DartParam),
+            ROSIDL_GET_MSG_TYPE_SUPPORT(dart_msgs, msg, DartLauncherStatus),
             "/dart_launcher_mcu/status");
 
     // subscribe to /buzzer/cmd_note and /buzzer/cmd_sound_effect
@@ -248,38 +292,38 @@ bool create_entities() {
             ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
             "/dart_launcher_mcu/cmd_sound_effect"))
 
-    RCSOFTCHECK(rclc_subscription_init_best_effort(
+    RCSOFTCHECK(rclc_subscription_init_default(
             &subscriber_protocol,
             &node,
-            ROSIDL_GET_MSG_TYPE_SUPPORT(dart_msgs, msg, DartParam),
+            ROSIDL_GET_MSG_TYPE_SUPPORT(dart_msgs, msg, DartLauncherParams),
             "/dart_launcher_mcu/cmd_protocols"));
 
     RCSOFTCHECK(rclc_subscription_init_default(
             &subscriber_parameter,
             &node,
-            ROSIDL_GET_MSG_TYPE_SUPPORT(dart_msgs, msg, DartParam),
+            ROSIDL_GET_MSG_TYPE_SUPPORT(dart_msgs, msg, DartLauncherParams),
             "/dart_launcher_mcu/cmd_params"))
 
-    RCSOFTCHECK(rclc_subscription_init_default(
+    RCSOFTCHECK(rclc_subscription_init_best_effort(
             &subscriber_greenlight,
             &node,
             ROSIDL_GET_MSG_TYPE_SUPPORT(dart_msgs, msg, GreenLight),
-            "/dart_launcher_detector/result/green_light"))
+            "/dart_launcher_detector/results/greenlight"))
 
     // create timer,
     const unsigned int timer_logger_timeout = 100;
     RCCHECK(rclc_timer_init_default2(
-            &timer,
+            &timer_log_update,
             &support,
             RCL_MS_TO_NS(timer_logger_timeout),
             timer_logger_callback, true));
 
     const unsigned int timer2_timeout = 100;
     RCCHECK(rclc_timer_init_default2(
-            &timer2,
+            &timer_status_update,
             &support,
             RCL_MS_TO_NS(timer2_timeout),
-            timer2_callback, true));
+            timer_send_status_callback, true));
 
     // 初始化消息
     msgString.data.capacity = LOG_BUF_LEN;
@@ -289,20 +333,20 @@ bool create_entities() {
     // create executor
     executor = rclc_executor_get_zero_initialized_executor();
     RCCHECK(rclc_executor_init(&executor, &support.context, 6, &allocator));
-    RCCHECK(rclc_executor_add_timer(&executor, &timer));
-    RCCHECK(rclc_executor_add_timer(&executor, &timer2));
+    RCCHECK(rclc_executor_add_timer(&executor, &timer_log_update));
+    RCCHECK(rclc_executor_add_timer(&executor, &timer_status_update));
 
     RCSOFTCHECK(rclc_executor_add_subscription(&executor, &subscriber_buzzer, &msgInt64,
                                                &subscription_buzzer_callback,
                                                ON_NEW_DATA));
-    RCSOFTCHECK(rclc_executor_add_subscription(&executor, &subscriber_protocol, &msgDartParam,
+    RCSOFTCHECK(rclc_executor_add_subscription(&executor, &subscriber_protocol, &msgDartProtocols,
                                                &subscription_protocol_setting_callback,
                                                ON_NEW_DATA));
-    RCSOFTCHECK(rclc_executor_add_subscription(&executor, &subscriber_parameter, &msgDartParam,
+    RCSOFTCHECK(rclc_executor_add_subscription(&executor, &subscriber_parameter, &msgDartParams,
                                                &subscription_parameter_setting_callback,
                                                ON_NEW_DATA));
     RCSOFTCHECK(rclc_executor_add_subscription(&executor, &subscriber_greenlight, &msgGreenLight,
-                                               &subscription_parameter_setting_callback,
+                                               &subscription_greenlight_callback,
                                                ON_NEW_DATA));
 
     return true;
@@ -313,9 +357,9 @@ void destroy_entities() {
     (void) rmw_uros_set_context_entity_destroy_session_timeout(rmw_context, 0);
 
     rcl_publisher_fini(&publisher_logger, &node);
-    rcl_publisher_fini(&publisher_can, &node);
-    rcl_timer_fini(&timer);
-    rcl_timer_fini(&timer2);
+    rcl_publisher_fini(&publisher_status, &node);
+    rcl_timer_fini(&timer_log_update);
+    rcl_timer_fini(&timer_status_update);
     rcl_subscription_fini(&subscriber_buzzer, &node);
     rcl_subscription_fini(&subscriber_protocol, &node);
     rcl_subscription_fini(&subscriber_parameter, &node);
@@ -363,51 +407,31 @@ void subscription_buzzer_callback(const void *msgin) {
     }
 }
 
-#include "dart_config.h"
-#include "state_machine.h"
-
 // 将堵转电机移动到初始位置
 state_machine::UpsideState state_machine::upside_state = state_machine::UpsideState::Idle;
 
 void subscription_protocol_setting_callback(const void *msgin) {
     const std_msgs__msg__Int32 *msg = (const std_msgs__msg__Int32 *) msgin;
 
-//    if (msgin != NULL) {
-//        // Limit the angle
-//        int angle = msg->data;
-//        if (angle == 0) {
-//            trigger_servo[0].setAngle(CONFIG_TRIGGER_SERVO_TRIGGER_ANGLE_0);
-//            trigger_servo[1].setAngle(CONFIG_TRIGGER_SERVO_TRIGGER_ANGLE_1);
-//        } else if (angle == 1) {
-//            trigger_servo[0].setAngle(CONFIG_TRIGGER_SERVO_RELOAD_ANGLE_0);
-//            trigger_servo[1].setAngle(CONFIG_TRIGGER_SERVO_RELOAD_ANGLE_1);
-//        } else if (angle == 2) {
-//            state_machine::upside_state = state_machine::UpsideState::MovingDown;
-//        } else if (angle == 3) {
-//            state_machine::upside_state = state_machine::UpsideState::MovingUp;
-//        } else if (angle == 4) {
-//
-//        }
-
-//        trigger_servo[0].enable();
-//        trigger_servo[1].enable();
-//    trigger_servo[0].setAngle(angle);
-//    trigger_servo[1].setAngle(angle);
-//    }
-}
-
-void subscription_parameter_setting_callback(const void *msgin) {
-    const auto *msg = (const dart_msgs__msg__DartParam *) msgin;
     if (msgin != NULL) {
-//        int32_t *data = msg->data.data;
-//        motor_controller::MotorYawLSController.target_angle_with_rounds_ = data[0];
-//        dart_launcher_params.primary_yaw = data[0];
-//        motor_controller::MotorTriggerLSController.target_angle_with_rounds_ = data[1];
-//        dart_launcher_params.primary_force = data[1];
     }
 }
 
-// --- 日志接口：任何上下文（包括 ISR/定时器回调）都可调用 ---
+void subscription_parameter_setting_callback(const void *msgin) {
+    // const auto *msg = (const dart_msgs__msg__DartLauncherParams *) msgin;
+    const auto *msg = (const dart_msgs__msg__GreenLight *) msgin;
+    if (msgin != NULL) {
+    }
+}
+
+void subscription_greenlight_callback(const void *msgin) {
+    if (msgin != NULL) {
+        // 更新时间戳
+        last_greenlight_update_time = xTaskGetTickCount();
+    }
+}
+
+// --- 日志接口：中断中不可调用 ---
 void dart_mcu_log(char *msg) {
     // 如果queue长于3 丢弃
     if (xLogQueue.size() > 10) {
