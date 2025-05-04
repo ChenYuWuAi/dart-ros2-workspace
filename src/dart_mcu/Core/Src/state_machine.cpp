@@ -217,6 +217,8 @@ do{                        \
                 motor::MotorLoad[0].target_current_;
         msgDartStatus.motor_loader_current[1] =
                 motor::MotorLoad[1].target_current_;
+        msgDartStatus.params = msgDartParams;
+        msgDartStatus.protocols = msgDartProtocols;
 
 
         // 比赛上场判断
@@ -513,6 +515,42 @@ do{                        \
         }
     };
 
+    bool updateAutoAim() {
+        static uint8_t no_autoaim_count = 0;
+        static TickType_t last_autoaim_update_tick = 0;
+        if (xTaskGetTickCount() - last_autoaim_update_tick > 100) { // 10 fps
+            last_autoaim_update_tick = xTaskGetTickCount();
+            if (msgDartParams.auto_aim_enabled) {
+                if (msgGreenLight.is_detected
+                    && xTaskGetTickCount() - last_greenlight_update_time < 400) {
+                    if (abs(msgGreenLight.location.x - msgDartParams.target_auto_aim_x_axis) > 5)
+                        msgDartParams.primary_yaw_offset = motor_controller::AutoAimController.update(
+                                msgDartParams.target_auto_aim_x_axis -
+                                msgGreenLight.location.x);
+                    no_autoaim_count = 0;
+                    static char buf[30];
+                    snprintf(buf, sizeof(buf), "Autoaim updated to %d", msgDartParams.primary_yaw_offset);
+                    dart_mcu_log(buf);
+                    motor_controller::MotorYawLSController.target_angle_with_rounds_ =
+                            msgDartParams.primary_yaw + msgDartParams.primary_yaw_offset;
+
+                    return true;
+                } else {
+                    no_autoaim_count++;
+                    if (no_autoaim_count > 5) {
+                        motor_controller::MotorYawLSController.target_angle_with_rounds_ =
+                                msgDartParams.primary_yaw;
+                        msgDartParams.primary_yaw_offset = 0;
+                        motor_controller::AutoAimController.reset();
+                    }
+                    dart_mcu_log("Skipped autoaim update.");
+                    return false;
+                }
+            }
+        }
+        return false;
+    }
+
     class ActionRemote : public OpenFSMAction {
     public:
         void enter(OpenFSM &fsm) const override {
@@ -569,16 +607,24 @@ do{                        \
                     // <+
                     // 100    +10                      -10      -100>
                     // 如果有速度，则转为速度控制模式，否则转为位置控制模式
+
                     if (RC_Data.ch0 > 900 && RC_Data.ch0 < 1100) {
                         if (motor_controller::MotorYawLSController.state_ !=
                             motor_controller::E_PID_Velocity_Angle_Controller_State::ANGLE_CONTROL) {
                             motor_controller::MotorYawLSController.set_state(
                                     motor_controller::E_PID_Velocity_Angle_Controller_State::ANGLE_CONTROL);
-                            motor_controller::MotorYawLSController.target_angle_with_rounds_ =
-                                    motor::MotorYawLS.current_round_ * 8192 + motor::MotorYawLS.current_angle_;
+                            motor_controller::MotorYawLSController.
+                                    target_angle_with_rounds_ = motor::MotorYawLS.current_round_ * 8192 +
+                                                                motor::MotorYawLS.current_angle_;
                             msgDartParams.primary_yaw = motor_controller::MotorYawLSController.
                                     target_angle_with_rounds_;
                         }
+                        // 从msgDartParams里获取
+                        // 判断是否更新自瞄
+                        if (!updateAutoAim() && !msgDartParams.auto_aim_enabled)
+                            motor_controller::MotorYawLSController.
+                                    target_angle_with_rounds_ = msgDartParams.primary_yaw;
+
                     } else {
                         if (motor_controller::MotorYawLSController.state_ !=
                             motor_controller::E_PID_Velocity_Angle_Controller_State::VELOCITY_CONTROL)
@@ -610,6 +656,9 @@ do{                        \
                             msgDartParams.primary_force = motor_controller::MotorTriggerLSController.
                                     target_angle_with_rounds_;
                         }
+                        // 从msgDartParams里获取新值
+                        motor_controller::MotorTriggerLSController.
+                                target_angle_with_rounds_ = msgDartParams.primary_force;
                     } else {
                         if (motor_controller::MotorTriggerLSController.state_ !=
                             motor_controller::E_PID_Velocity_Angle_Controller_State::VELOCITY_CONTROL)
@@ -1051,7 +1100,7 @@ do{                        \
 
             if (launch_grant_)
                 dart_mcu_log("Launch granted ,from ;!");
-                fsm.nextAction();
+            fsm.nextAction();
         }
 
         void exit(OpenFSM &fsm) const override {

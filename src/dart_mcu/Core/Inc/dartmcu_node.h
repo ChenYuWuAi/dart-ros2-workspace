@@ -57,6 +57,8 @@ void subscription_protocol_setting_callback(const void *msgin);
 
 void subscription_parameter_setting_callback(const void *msgin);
 
+void subscription_greenlight_callback(const void *msgin);
+
 // --- 日志函数原型 ---
 void dart_mcu_log(char *msg);
 
@@ -68,5 +70,7 @@ extern rcl_timer_t timer_log_update;
 extern rclc_executor_t executor;
 extern std_msgs__msg__Int64 msgInt64;
 extern std_msgs__msg__String msgString;
+
+extern TickType_t last_greenlight_update_time;
 
 #endif //DART_MCU_DARTMCU_NODE_H

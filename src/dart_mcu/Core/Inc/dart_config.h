@@ -73,6 +73,7 @@
 #define LOG_QUEUE_LEN 10
 
 extern dart_msgs__msg__DartLauncherParams msgDartParams;
+extern dart_msgs__msg__DartLauncherParams msgDartProtocols;
 extern dart_msgs__msg__GreenLight msgGreenLight;
 extern dart_msgs__msg__DartLauncherStatus msgDartStatus;
 

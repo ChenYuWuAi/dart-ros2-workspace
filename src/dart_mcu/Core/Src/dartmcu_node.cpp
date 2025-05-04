@@ -75,6 +75,20 @@ dart_msgs__msg__DartLauncherParams msgDartParams = {
         .last_param_update_time = 0
 };
 
+dart_msgs__msg__DartLauncherParams msgDartProtocols = {
+        .primary_yaw = 40000,
+        .primary_yaw_offset = 0,
+        .primary_force = 1000000,
+        .primary_force_offset = 0,
+        .auxiliary_yaw_offsets = {0, 0, 0, 0},
+        .auxiliary_force_offsets = {0, 0, 0, 0},
+        .dart_launch_process_offset_begin = 0,
+        .dart_launch_process_offset_end = 3,
+        .auto_aim_enabled = false,
+        .target_auto_aim_x_axis = 640,
+        .last_param_update_time = 0
+};
+
 dart_msgs__msg__DartLauncherStatus msgDartStatus = {
         .motor_yaw_online = false,
         .motor_loader_online = {false, false},
@@ -93,7 +107,9 @@ dart_msgs__msg__DartLauncherStatus msgDartStatus = {
         .game_progress = 0,
         .dart_remaining_time = 0,
         .latest_launch_cmd_time = 0,
-        .stage_remain_time = 0
+        .stage_remain_time = 0,
+        .params = msgDartParams,
+        .protocols = msgDartProtocols,
 };
 
 char msgString_buf[LOG_BUF_LEN];
@@ -101,6 +117,8 @@ char msgString_buf[LOG_BUF_LEN];
 velocity_meter_result_t velocity_meter_result;
 
 TaskHandle_t velocity_meter_result_task_handle;
+
+TickType_t last_greenlight_update_time = 0;
 
 extern "C"
 {
@@ -321,15 +339,14 @@ bool create_entities() {
     RCSOFTCHECK(rclc_executor_add_subscription(&executor, &subscriber_buzzer, &msgInt64,
                                                &subscription_buzzer_callback,
                                                ON_NEW_DATA));
-    RCSOFTCHECK(rclc_executor_add_subscription(&executor, &subscriber_protocol, &msgDartParams,
+    RCSOFTCHECK(rclc_executor_add_subscription(&executor, &subscriber_protocol, &msgDartProtocols,
                                                &subscription_protocol_setting_callback,
                                                ON_NEW_DATA));
     RCSOFTCHECK(rclc_executor_add_subscription(&executor, &subscriber_parameter, &msgDartParams,
                                                &subscription_parameter_setting_callback,
                                                ON_NEW_DATA));
-    // TODO:完成与上位机关于Yaw轴自瞄的通信
     RCSOFTCHECK(rclc_executor_add_subscription(&executor, &subscriber_greenlight, &msgGreenLight,
-                                               &subscription_parameter_setting_callback,
+                                               &subscription_greenlight_callback,
                                                ON_NEW_DATA));
 
     return true;
@@ -390,66 +407,31 @@ void subscription_buzzer_callback(const void *msgin) {
     }
 }
 
-#include "dart_config.h"
-#include "state_machine.h"
-
 // 将堵转电机移动到初始位置
 state_machine::UpsideState state_machine::upside_state = state_machine::UpsideState::Idle;
 
 void subscription_protocol_setting_callback(const void *msgin) {
     const std_msgs__msg__Int32 *msg = (const std_msgs__msg__Int32 *) msgin;
 
-//    if (msgin != NULL) {
-//        // Limit the angle
-//        int angle = msg->data;
-//        if (angle == 0) {
-//            trigger_servo[0].setAngle(CONFIG_TRIGGER_SERVO_TRIGGER_ANGLE_0);
-//            trigger_servo[1].setAngle(CONFIG_TRIGGER_SERVO_TRIGGER_ANGLE_1);
-//        } else if (angle == 1) {
-//            trigger_servo[0].setAngle(CONFIG_TRIGGER_SERVO_RELOAD_ANGLE_0);
-//            trigger_servo[1].setAngle(CONFIG_TRIGGER_SERVO_RELOAD_ANGLE_1);
-//        } else if (angle == 2) {
-//            state_machine::upside_state = state_machine::UpsideState::MovingDown;
-//        } else if (angle == 3) {
-//            state_machine::upside_state = state_machine::UpsideState::MovingUp;
-//        } else if (angle == 4) {
-//
-//        }
-
-//        trigger_servo[0].enable();
-//        trigger_servo[1].enable();
-//    trigger_servo[0].setAngle(angle);
-//    trigger_servo[1].setAngle(angle);
-//    }
+    if (msgin != NULL) {
+    }
 }
 
 void subscription_parameter_setting_callback(const void *msgin) {
     // const auto *msg = (const dart_msgs__msg__DartLauncherParams *) msgin;
     const auto *msg = (const dart_msgs__msg__GreenLight *) msgin;
     if (msgin != NULL) {
-//        int32_t *data = msg->data.data;
-//        motor_controller::MotorYawLSController.target_angle_with_rounds_ = data[0];
-//        dart_launcher_params.primary_yaw = data[0];
-//        motor_controller::MotorTriggerLSController.target_angle_with_rounds_ = data[1];
-//        dart_launcher_params.primary_force = data[1];
+    }
+}
+
+void subscription_greenlight_callback(const void *msgin) {
+    if (msgin != NULL) {
         // 更新时间戳
-        static uint32_t last_greenlight_update_time = xTaskGetTickCount();
-        // 记录 msgGreenLight 的信息（如 x 坐标）
-        if (msg->is_detected
-            && xTaskGetTickCount() - last_greenlight_update_time < 200) {
-            if (abs(msg->location.x - msgDartParams.target_auto_aim_x_axis) > 5)
-                msgDartParams.primary_yaw_offset = motor_controller::AutoAimController.update(
-                    msg->location.x - msgDartParams.target_auto_aim_x_axis);
-            dart_mcu_log("GreenLight detected.");
-        } else {
-            dart_mcu_log("GreenLight not detected.");
-            msgDartParams.primary_yaw_offset = 0;
-        }
         last_greenlight_update_time = xTaskGetTickCount();
     }
 }
 
-// --- 日志接口：任何上下文（包括 ISR/定时器回调）都可调用 ---
+// --- 日志接口：中断中不可调用 ---
 void dart_mcu_log(char *msg) {
     // 如果queue长于3 丢弃
     if (xLogQueue.size() > 10) {

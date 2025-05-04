@@ -22,6 +22,9 @@ extern "C"
 // Include directives for member types
 // Member 'header'
 #include "std_msgs/msg/detail/header__struct.h"
+// Member 'params'
+// Member 'protocols'
+#include "dart_msgs/msg/detail/dart_launcher_params__struct.h"
 
 /// Struct defined in msg/DartLauncherStatus in the package dart_msgs.
 typedef struct dart_msgs__msg__DartLauncherStatus
@@ -45,6 +48,8 @@ typedef struct dart_msgs__msg__DartLauncherStatus
   uint8_t dart_remaining_time;
   uint16_t latest_launch_cmd_time;
   uint16_t stage_remain_time;
+  dart_msgs__msg__DartLauncherParams params;
+  dart_msgs__msg__DartLauncherParams protocols;
 } dart_msgs__msg__DartLauncherStatus;
 
 // Struct for a sequence of dart_msgs__msg__DartLauncherStatus.

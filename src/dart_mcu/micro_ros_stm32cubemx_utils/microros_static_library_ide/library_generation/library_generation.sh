@@ -31,6 +31,7 @@ cd /uros_ws
 
 rm -rf ./firmware
 
+
 source /opt/ros/$ROS_DISTRO/setup.bash
 source install/local_setup.bash
 
@@ -48,14 +49,32 @@ pushd firmware/mcu_ws > /dev/null
     mkdir extra_packages
     pushd extra_packages > /dev/null
         USER_CUSTOM_PACKAGES_DIR=$BASE_PATH/../../microros_component/extra_packages
-    	if [ -d "$USER_CUSTOM_PACKAGES_DIR" ]; then
-    		cp -R $USER_CUSTOM_PACKAGES_DIR/* .
-		fi
+        if [ -d "$USER_CUSTOM_PACKAGES_DIR" ]; then
+            cp -R $USER_CUSTOM_PACKAGES_DIR/* .
+        fi
         if [ -f $USER_CUSTOM_PACKAGES_DIR/extra_packages.repos ]; then
-        	vcs import --input $USER_CUSTOM_PACKAGES_DIR/extra_packages.repos
+            RETRY_COUNT=0
+            MAX_RETRIES=5
+            until vcs import --input $USER_CUSTOM_PACKAGES_DIR/extra_packages.repos || [ $RETRY_COUNT -ge $MAX_RETRIES ]; do
+                echo "vcs import failed. Retrying... ($((RETRY_COUNT+1))/$MAX_RETRIES)"
+                sleep 2
+            done
+            if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
+                echo "vcs import failed after $MAX_RETRIES attempts."
+                exit 1
+            fi
         fi
         cp -R $BASE_PATH/library_generation/extra_packages/* .
-        vcs import --input extra_packages.repos
+        RETRY_COUNT=0
+        until vcs import --input extra_packages.repos || [ $RETRY_COUNT -ge $MAX_RETRIES ]; do
+            echo "vcs import failed. Retrying... ($((RETRY_COUNT+1))/$MAX_RETRIES)"
+            RETRY_COUNT=$((RETRY_COUNT+1))
+            sleep 2
+        done
+        if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
+            echo "vcs import failed after $MAX_RETRIES attempts."
+            exit 1
+        fi
     popd > /dev/null
 
     if [ ! -z ${MICROROS_USE_EMBEDDEDRTPS+x} ]; then
@@ -63,7 +82,6 @@ pushd firmware/mcu_ws > /dev/null
         rm -rf uros/rmw_microxrcedds
 
         git clone -b main https://github.com/micro-ROS/rmw_embeddedrtps uros/rmw_embeddedrtps
-        git clone -b main https://github.com/micro-ROS/embeddedRTPS uros/embeddedRTPS
     fi
 
 popd > /dev/null
