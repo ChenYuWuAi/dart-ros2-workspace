@@ -30,6 +30,10 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
     dart_param_pub_ = this->create_publisher<dart_msgs::msg::DartLauncherParams>(
         "/dart_launcher_mcu/cmd_params", rclcpp::QoS(10).durability_volatile().reliable());
 
+        
+    dart_buzzer_cmd_pub_ = this->create_publisher<std_msgs::msg::Int32>(
+        "/dart_launcher_mcu/cmd_sound_effect", rclcpp::QoS(10).durability_volatile().reliable());
+
     dart_param_sub_ = this->create_subscription<dart_msgs::msg::DartLauncherParams>(
         "/dart_launcher_mcu/params", rclcpp::QoS(10).durability_volatile().best_effort(),
         [this](const dart_msgs::msg::DartLauncherParams::SharedPtr msg)
@@ -48,6 +52,10 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
             {
                 RCLCPP_INFO(get_logger(), "Key: %s, Value: %s", it.key().c_str(), it.value().dump().c_str());
             }
+            // 启动音效
+            std_msgs::msg::Int32 sound_effect_msg;
+            sound_effect_msg.data = 2; // 1 for sound effect
+            dart_buzzer_cmd_pub_->publish(sound_effect_msg);
         });
 
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
