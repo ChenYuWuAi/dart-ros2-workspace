@@ -10,6 +10,7 @@
 
 // Std_msg
 #include <std_msgs/msg/string.hpp>
+#include <std_msgs/msg/int32.hpp>
 
 // Dart_msg
 #include <dart_msgs/msg/dart_launcher_params.hpp>
@@ -46,7 +47,7 @@ private:
 
     // Publisher
     rclcpp::Publisher<dart_msgs::msg::DartLauncherParams>::SharedPtr dart_param_pub_;
-
+    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr dart_buzzer_cmd_pub_;
     // Subscriber
     // for string json params
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr dart_qr_param_sub_;
