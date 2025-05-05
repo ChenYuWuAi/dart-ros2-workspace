@@ -158,7 +158,8 @@ do{                        \
                 } else if (RC_Data.Switch_Right == RC_SW_MID) {
                     next_state = E_Dart_State::Remote;
                 }
-            } else if (enterProtectIfDisconnected) {
+            } else if (dart_fsm.openFSM_.focusEState() != Protect &&
+                       enterProtectIfDisconnected) {
                 next_state = E_Dart_State::Protect;
                 dart_mcu_log("Enter Protect: Remote Disconnected");
             }
@@ -219,7 +220,11 @@ do{                        \
                 motor::MotorLoad[1].target_current_;
         msgDartStatus.params = msgDartParams;
         msgDartStatus.protocols = msgDartProtocols;
-
+        msgDartStatus.game_progress = ext_game_status.game_progress;
+        msgDartStatus.stage_remain_time = ext_game_status.stage_remain_time;
+        msgDartStatus.dart_remaining_time = ext_dart_info.dart_remaining_time;
+        msgDartStatus.dart_launch_opening_status = ext_dart_client_cmd.dart_launch_opening_status;;
+        msgDartStatus.latest_launch_cmd_time = ext_dart_client_cmd.latest_launch_cmd_time;
 
         // 比赛上场判断
         if (ext_game_status.game_progress != 0)
@@ -515,7 +520,7 @@ do{                        \
                     // 播放选定的歌曲
                     soundEffectManager.clearSoundEffects();
                     choose_sound_effect(song_index);
-                } else if(RC_Data.Switch_Left == RC_SW_DOWN){
+                } else if (RC_Data.Switch_Left == RC_SW_DOWN) {
                     song_index =
                             (song_index - 1 + BuzzerSound::BuzzerSoundMax) % BuzzerSound::BuzzerSoundMax; // 逆时针拨动，上一首
                     // 播放选定的歌曲
@@ -536,7 +541,7 @@ do{                        \
         }
     };
 
-    bool updateAutoAim(dart_msgs__msg__DartLauncherParams & msgDartParams) {
+    bool updateAutoAim(dart_msgs__msg__DartLauncherParams &msgDartParams) {
         static uint8_t no_autoaim_count = 0;
         static TickType_t last_autoaim_update_tick = 0;
         if (xTaskGetTickCount() - last_autoaim_update_tick > 100) { // 10 fps
@@ -904,7 +909,7 @@ do{                        \
             } else if (RC_Data.Switch_Left == RC_SW_DOWN) {
                 int16_t base_velocity = 0;
                 motor_controller::MotorTriggerLSController.target_angle_with_rounds_
-                 = msgDartParams.primary_force ;
+                        = msgDartParams.primary_force;
                 if (!fsm.custom<Dart_FSM>()->launch_operating_) {
                     // 解锁扳机，内八触发一次发射，Load电机带动同步带到顶端，扳机解锁
                     bool launch_grant_ = false;
@@ -955,11 +960,12 @@ do{                        \
         void enter(OpenFSM &fsm) const override {
             // 比赛状态
             soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_never_forget));
-            msgDartStatus.dart_launch_process = msgDartParams.dart_launch_process_offset_begin;
+            msgDartStatus.dart_launch_process = msgDartProtocols.dart_launch_process_offset_begin;
             msgDartStatus.dart_state = E_Match_Actions::Enter + E_Dart_State::Match;
 
             setLoadServotoUP();
 
+            fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = false;
             msgDartStatus.dart_state = dart_fsm.openFSM_.focusEState() + 0;
         }
 
@@ -979,8 +985,9 @@ do{                        \
             motor_controller::MotorLoadController[1].set_state(
                     motor_controller::E_PID_Velocity_Angle_Controller_State::VELOCITY_CONTROL);
 
-            motor_controller::MotorTriggerLSController.target_angle_with_rounds_ = msgDartParams.primary_force;
-            motor_controller::MotorYawLSController.target_angle_with_rounds_ = msgDartParams.primary_yaw;
+            motor_controller::MotorTriggerLSController.target_angle_with_rounds_ =
+                    msgDartProtocols.primary_force + msgDartProtocols.primary_force_offset;
+            motor_controller::MotorYawLSController.target_angle_with_rounds_ = msgDartProtocols.primary_yaw;
 
             // 计算base_velocity
             int base_velocity, load_reset_complete = false;
@@ -1002,9 +1009,9 @@ do{                        \
 
             // MotorYawLS、MotorTriggerLS、MotorLoad到达目标位置
             if (abs(motor_controller::MotorTriggerLSController.current_angle_with_rounds_ -
-                    msgDartParams.primary_force) < 10000 &&
+                    msgDartProtocols.primary_force) < 10000 &&
                 abs(motor_controller::MotorYawLSController.current_angle_with_rounds_ -
-                    msgDartParams.primary_yaw) < 1000 && load_reset_complete) {
+                    msgDartProtocols.primary_yaw) < 1000 && load_reset_complete) {
                 fsm.nextAction();
             }
         }
@@ -1046,13 +1053,13 @@ do{                        \
 
             // TODO:计算好primary_yaw_offset的值，并进行调试
             motor_controller::MotorTriggerLSController.target_angle_with_rounds_ =
-                    msgDartParams.primary_force + msgDartParams.primary_force_offset;
+                    msgDartProtocols.primary_force + msgDartProtocols.primary_force_offset +
+                    msgDartProtocols.auxiliary_force_offsets[msgDartStatus.dart_launch_process];
 
             // 判断是否更新自瞄
             if (!updateAutoAim(msgDartProtocols) && !msgDartProtocols.auto_aim_enabled)
                 motor_controller::MotorYawLSController.
-                                    target_angle_with_rounds_ = msgDartProtocols.primary_yaw;
-
+                        target_angle_with_rounds_ = msgDartProtocols.primary_yaw;
 
             // 读取裁判系统变量，线程安全
             uint8_t dart_launch_opening_status = ext_dart_client_cmd.dart_launch_opening_status;
@@ -1126,8 +1133,7 @@ do{                        \
             }
 #endif
 
-            if (launch_grant_)
-            {
+            if (launch_grant_) {
                 dart_mcu_log("Launch granted!");
                 fsm.nextAction();
             }
@@ -1169,60 +1175,77 @@ do{                        \
             motor_controller::MotorLoadController[1].set_state(
                     motor_controller::E_PID_Velocity_Angle_Controller_State::VELOCITY_CONTROL);
 
-            // 目标位置
-            if (xTaskGetTickCount() -
-                fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ < CONFIG_AUTOAIM_TIMEOUT_MS
-                && !updateAutoAim(msgDartProtocols)) {
-                // TODO: 在此执行自瞄控制器更新
+            motor_controller::MotorTriggerLSController.target_angle_with_rounds_ =
+                    msgDartProtocols.primary_force + msgDartProtocols.primary_force_offset +
+                    msgDartProtocols.auxiliary_force_offsets[msgDartStatus.dart_launch_process];
 
-                motor_controller::MotorTriggerLSController.target_angle_with_rounds_ =
-                        msgDartParams.primary_force + msgDartParams.primary_force_offset;
 
-                motor_controller::MotorYawLSController.target_angle_with_rounds_ =
-                        msgDartParams.primary_yaw + msgDartParams.primary_yaw_offset;
-            } else {
-                // 按照飞镖专属参数进行发射
-                motor_controller::MotorTriggerLSController.target_angle_with_rounds_ =
-                        msgDartParams.primary_force + msgDartParams.primary_force_offset +
-                        msgDartParams.auxiliary_force_offsets[msgDartStatus.dart_launch_process];
-
-                motor_controller::MotorYawLSController.target_angle_with_rounds_ =
-                        msgDartParams.primary_yaw + msgDartParams.primary_yaw_offset +
-                        msgDartParams.auxiliary_yaw_offsets[msgDartStatus.dart_launch_process];
-            }
 
             // Launch里面有几种连续状态：
-            // 0: Downward 1: Upward 2: Trigger 3. Restore Trigger
-            double base_velocity;
+            // 0: Wait Autoaim 1: Wait stable 2: Downward 3: Upward 4: Trigger 5. Restore Trigger
+            double base_velocity = 0;
             switch (fsm.custom<Dart_FSM>()->ActionMatch_Launch_State) {
                 case 0:
+                    // 目标位置
+                    if (msgDartProtocols.auto_aim_enabled) {
+                        if (xTaskGetTickCount() -
+                            fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ < CONFIG_AUTOAIM_TIMEOUT_MS
+                                ) {
+                            updateAutoAim(msgDartProtocols);
+                        } else {
+                            // 按照飞镖专属参数进行发射
+                            motor_controller::MotorYawLSController.target_angle_with_rounds_ =
+                                    msgDartProtocols.primary_yaw + msgDartProtocols.primary_yaw_offset +
+                                    msgDartProtocols.auxiliary_yaw_offsets[msgDartStatus.dart_launch_process];
+                            fsm.custom<Dart_FSM>()->ActionMatch_Launch_State = 1;
+                            fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ = xTaskGetTickCount();
+                        }
+                    } else {
+                        motor_controller::MotorYawLSController.target_angle_with_rounds_ =
+                                msgDartProtocols.primary_yaw +
+                                msgDartProtocols.auxiliary_yaw_offsets[msgDartStatus.dart_launch_process];
+                        fsm.custom<Dart_FSM>()->ActionMatch_Launch_State = 1;
+                        fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ = xTaskGetTickCount();
+                    }
+                    break;
+                case 1:
+                    // 等待电机稳定
+                    if (xTaskGetTickCount() - fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ >
+                        pdMS_TO_TICKS(CONFIG_LAUNCH_WAIT_MOTOR_STABLE_TIME)) {
+                        fsm.custom<Dart_FSM>()->ActionMatch_Launch_State = 2;
+                    }
+                    break;
+                case 2:
                     // 向下运动
                     base_velocity = CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
                     if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ >=
                         CONFIG_MOTOR_LOAD_ANGLE_DOWN ||
                         motor_controller::MotorLoadController[1].current_angle_with_rounds_ >=
                         CONFIG_MOTOR_LOAD_ANGLE_DOWN) {
-                        fsm.custom<Dart_FSM>()->ActionMatch_Launch_State = 1;
+                        meter::velocity_meter.enable();
+                        fsm.custom<Dart_FSM>()->launch_operating_ = true;
+                        soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_approach));
+                        fsm.custom<Dart_FSM>()->ActionMatch_Launch_State = 3;
                     }
                     break;
 
-                case 1:
+                case 3:
                     // 向上运动
                     // TODO: 发射调试测试动作
-                    setTriggerServotoTrigger();
+//                    setTriggerServotoTrigger();
                     base_velocity = -CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
                     if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
                         CONFIG_MOTOR_LOAD_ANGLE_LAUNCH ||
                         motor_controller::MotorLoadController[1].current_angle_with_rounds_ <= -
                                 CONFIG_MOTOR_LOAD_ANGLE_LAUNCH) {
                         // TODO: 删掉这一测试动作
-                        setTriggerServotoReload();
-                        fsm.custom<Dart_FSM>()->ActionMatch_Launch_State = 2;
+//                        setTriggerServotoReload();
+                        fsm.custom<Dart_FSM>()->ActionMatch_Launch_State = 4;
                         fsm.custom<Dart_FSM>()->ActionGeneral_Timer0_ = xTaskGetTickCount();
                     }
                     break;
 
-                case 2:
+                case 4:
                     // 扳机丝杆扣下后等待
                     setTriggerServotoTrigger();
                     base_velocity = 0;
@@ -1424,6 +1447,5 @@ do{                        \
             dart_fsm.update();
             vTaskDelayUntil(&last_time, pdMS_TO_TICKS(1)); // 200Hz
         }
-        vTaskDelete(nullptr);
     }
 } // state_machine
