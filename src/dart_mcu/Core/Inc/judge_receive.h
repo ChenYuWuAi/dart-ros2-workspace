@@ -7,8 +7,8 @@
 #include "task.h"
 
 #define REFEREE_DMA_SIZE (130)//一帧最长128字节（见通信协议），留两个字节防炸
-#define UART6_MAX_RECEIVE_BUFFER_LENGTH 300
-#define REFEREE_HUART huart6//改成自己兵种配置的串口
+#define UART3_MAX_RECEIVE_BUFFER_LENGTH 300
+#define REFEREE_HUART huart3//改成自己兵种配置的串口
 
 /*
 Version:2024.01.22
@@ -993,5 +993,5 @@ void Append_CRC16_Check_Sum(uint8_t *pchMessage, uint32_t dwLength);
 
 /*--------------------------------------------------校验函数--------------------------------------------------*/
 
-extern uint8_t judge_rx_buffer[2][UART6_MAX_RECEIVE_BUFFER_LENGTH];
+extern uint8_t judge_rx_buffer[2][UART3_MAX_RECEIVE_BUFFER_LENGTH];
 #endif

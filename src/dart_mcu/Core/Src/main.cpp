@@ -133,6 +133,7 @@ int main(void)
     HAL_CAN_ActivateNotification(&hcan2, CAN_IT_RX_FIFO0_MSG_PENDING);
 
 
+    HAL_UARTEx_ReceiveToIdle_DMA(&huart3, judge_rx_buffer[0], UART3_MAX_RECEIVE_BUFFER_LENGTH);
     HAL_UARTEx_ReceiveToIdle_DMA(&huart1, uart1RecBuffer, UART1_MAX_RECEIVE_BUFFER_LENGTH);
   /* USER CODE END 2 */
 
@@ -221,7 +222,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size) {
         static uint8_t decode_memory_ = MEMORY0;
 
         HAL_UARTEx_ReceiveToIdle_DMA(&huart3, judge_rx_buffer[(decode_memory_ + 1) % 2],
-                                     UART6_MAX_RECEIVE_BUFFER_LENGTH);
+                                     UART3_MAX_RECEIVE_BUFFER_LENGTH);
         RefereeReceive(Size, judge_rx_buffer[decode_memory_]
         );
         decode_memory_ = (decode_memory_ + 1) % 2;

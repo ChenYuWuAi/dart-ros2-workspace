@@ -471,6 +471,9 @@ do{                        \
 
     class ActionProtect : public OpenFSMAction {
     public:
+        mutable int song_index = 0; // 当前歌曲索引
+        mutable int last_sw_left = 0; // 上一首歌曲索引
+
         void enter(OpenFSM &fsm) const override {
             // 保护状态
             soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_autopilot_disconnect));
@@ -479,6 +482,7 @@ do{                        \
             //            disableTriggerServo();
             meter::velocity_meter.disable();
             msgDartStatus.dart_state = dart_fsm.openFSM_.focusEState();
+            last_sw_left = RC_Data.Switch_Left; // 保存上一次拨轮位置
         }
 
         void update(OpenFSM &fsm) const override {
@@ -502,6 +506,23 @@ do{                        \
                 reboot_can(&hcan1);
                 reboot_can(&hcan2);
                 return;
+            }
+
+            // 使用拨轮选择歌曲
+            if (RC_Data.Switch_Left != last_sw_left) {
+                if (RC_Data.Switch_Left == RC_SW_UP) {
+                    song_index = (song_index + 1) % BuzzerSound::BuzzerSoundMax; // 顺时针拨动，下一首
+                    // 播放选定的歌曲
+                    soundEffectManager.clearSoundEffects();
+                    choose_sound_effect(song_index);
+                } else if(RC_Data.Switch_Left == RC_SW_DOWN){
+                    song_index =
+                            (song_index - 1 + BuzzerSound::BuzzerSoundMax) % BuzzerSound::BuzzerSoundMax; // 逆时针拨动，上一首
+                    // 播放选定的歌曲
+                    soundEffectManager.clearSoundEffects();
+                    choose_sound_effect(song_index);
+                }
+                last_sw_left = RC_Data.Switch_Left;
             }
 
             setNextStateByRemote();

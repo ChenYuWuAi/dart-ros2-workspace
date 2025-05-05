@@ -374,36 +374,80 @@ void destroy_entities() {
     USB_DEVICE_Start();
 }
 
-void subscription_buzzer_callback(const void *msgin) {
-    const auto *msg = (const std_msgs__msg__Int32 *) msgin;
-    switch (msg->data) {
-        case song_list::Eautopilot_disconnect:
+
+void choose_sound_effect(int index) {
+    switch (index) {
+        case BuzzerSound::BuzzerAutopilotDisconnect:
             soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_autopilot_disconnect));
             break;
-        case song_list::Elaoda:
-            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_laoda));
+        case BuzzerSound::BuzzerLaunch:
+            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_launch));
             break;
-        case song_list::Eharu:
+        case BuzzerSound::BuzzerHaru:
             soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_haru));
             break;
-        case song_list::Ereconnect:
+        case BuzzerSound::BuzzerDjiStartup:
             soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_dji_startup));
             break;
-        case song_list::Estartup:
+        case BuzzerSound::BuzzerWinxp:
+            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_winxp));
+            break;
+        case BuzzerSound::BuzzerApproach:
+            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_approach));
+            break;
+        case BuzzerSound::BuzzerLaoda:
+            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_laoda));
+            break;
+        case BuzzerSound::BuzzerStartup:
             soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_startup));
             break;
-        case song_list::Eplug_in:
+        case BuzzerSound::BuzzerPlugIn:
             soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_plug_in));
             break;
-        case song_list::Eremove:
+        case BuzzerSound::BuzzerRemove:
             soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_remove));
             break;
-        case song_list::Eprotect:
+        case BuzzerSound::BuzzerError:
+            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_error));
+            break;
+        case BuzzerSound::BuzzerProtect:
             soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_protect));
+            break;
+        case BuzzerSound::BuzzerChunriying:
+            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_chunriying));
+            break;
+        case BuzzerSound::BuzzerIfICouldBeAConstelletion:
+            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_if_i_could_be_a_constelletion));
+            break;
+        case BuzzerSound::BuzzerGuitarLonelinessBlueEarth:
+            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_guitar_loneliness_blue_earth));
+            break;
+        case BuzzerSound::BuzzerNeverForget:
+            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_never_forget));
+            break;
+        case BuzzerSound::BuzzerBokuranomachi:
+            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_bokuranomachi));
+            break;
+        case BuzzerSound::BuzzerBadApple:
+            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_bad_apple));
+            break;
+        case BuzzerSound::BuzzerWarn:
+            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_warn));
+            break;
+        case BuzzerSound::BuzzerDontSayLazy:
+            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_dont_say_lazy));
             break;
         default:
             soundEffectManager.stopCurrentSoundEffect();
             break;
+    }
+}
+
+void subscription_buzzer_callback(const void *msgin) {
+    const auto *msg = (const std_msgs__msg__Int32 *) msgin;
+    if (msgin != NULL) {
+        // 播放音效
+        choose_sound_effect(msg->data);
     }
 }
 

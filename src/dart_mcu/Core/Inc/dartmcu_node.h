@@ -59,6 +59,8 @@ void subscription_parameter_setting_callback(const void *msgin);
 
 void subscription_greenlight_callback(const void *msgin);
 
+void choose_sound_effect(int index);
+
 // --- 日志函数原型 ---
 void dart_mcu_log(char *msg);
 
