@@ -515,7 +515,7 @@ do{                        \
         }
     };
 
-    bool updateAutoAim() {
+    bool updateAutoAim(dart_msgs__msg__DartLauncherParams & msgDartParams) {
         static uint8_t no_autoaim_count = 0;
         static TickType_t last_autoaim_update_tick = 0;
         if (xTaskGetTickCount() - last_autoaim_update_tick > 100) { // 10 fps
@@ -557,6 +557,7 @@ do{                        \
             enableTriggerServo();
             enableSlidedownServo();
             setTriggerServotoReload();
+
 
             setLoadServotoUP();
             setSlidedownServotoCut();
@@ -621,7 +622,7 @@ do{                        \
                         }
                         // 从msgDartParams里获取
                         // 判断是否更新自瞄
-                        if (!updateAutoAim() && !msgDartParams.auto_aim_enabled)
+                        if (!updateAutoAim(msgDartParams) && !msgDartParams.auto_aim_enabled)
                             motor_controller::MotorYawLSController.
                                     target_angle_with_rounds_ = msgDartParams.primary_yaw;
 
@@ -881,6 +882,8 @@ do{                        \
                         base_velocity - motor_controller::MotorLoadSyncController.output;
             } else if (RC_Data.Switch_Left == RC_SW_DOWN) {
                 int16_t base_velocity = 0;
+                motor_controller::MotorTriggerLSController.target_angle_with_rounds_
+                 = msgDartParams.primary_force ;
                 if (!fsm.custom<Dart_FSM>()->launch_operating_) {
                     // 解锁扳机，内八触发一次发射，Load电机带动同步带到顶端，扳机解锁
                     bool launch_grant_ = false;
@@ -1024,8 +1027,11 @@ do{                        \
             motor_controller::MotorTriggerLSController.target_angle_with_rounds_ =
                     msgDartParams.primary_force + msgDartParams.primary_force_offset;
 
-            motor_controller::MotorYawLSController.target_angle_with_rounds_ =
-                    msgDartParams.primary_yaw + msgDartParams.primary_yaw_offset;
+            // 判断是否更新自瞄
+            if (!updateAutoAim(msgDartProtocols) && !msgDartProtocols.auto_aim_enabled)
+                motor_controller::MotorYawLSController.
+                                    target_angle_with_rounds_ = msgDartProtocols.primary_yaw;
+
 
             // 读取裁判系统变量，线程安全
             uint8_t dart_launch_opening_status = ext_dart_client_cmd.dart_launch_opening_status;
@@ -1074,9 +1080,10 @@ do{                        \
                     fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = true;
             }
 
-            // 门控 比赛时间不足\准备阶段\自检时拒绝发射
+            // 门控 比赛时间不足\准备阶段\自检时\自瞄进行中 拒绝发射
             if ((ext_game_status.stage_remain_time < 10 && game_progress == 4) || game_progress == 1 ||
                 game_progress == 2 || game_progress == 3 || game_progress == 5) {
+
                 launch_grant_ = false;
                 fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = false;
             }
@@ -1099,8 +1106,10 @@ do{                        \
 #endif
 
             if (launch_grant_)
-                dart_mcu_log("Launch granted ,from ;!");
-            fsm.nextAction();
+            {
+                dart_mcu_log("Launch granted!");
+                fsm.nextAction();
+            }
         }
 
         void exit(OpenFSM &fsm) const override {
@@ -1141,7 +1150,8 @@ do{                        \
 
             // 目标位置
             if (xTaskGetTickCount() -
-                fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ < CONFIG_AUTOAIM_TIMEOUT_MS) {
+                fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ < CONFIG_AUTOAIM_TIMEOUT_MS
+                && !updateAutoAim(msgDartProtocols)) {
                 // TODO: 在此执行自瞄控制器更新
 
                 motor_controller::MotorTriggerLSController.target_angle_with_rounds_ =
