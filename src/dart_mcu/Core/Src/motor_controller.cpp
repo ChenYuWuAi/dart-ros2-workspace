@@ -46,7 +46,7 @@ namespace motor_controller
     };
 
 
-    pid_controller<double> AutoAimController = pid_controller<double>(20, 7.0, 0.0, 100000.0, 50000.0, 300000.0,
+    pid_controller<double> AutoAimController = pid_controller<double>(20, 5.0, 0.0, 100000.0, 50000.0, 300000.0,
                                                                             100000.0);
 
     double motor_load_sync_offset = 0;
