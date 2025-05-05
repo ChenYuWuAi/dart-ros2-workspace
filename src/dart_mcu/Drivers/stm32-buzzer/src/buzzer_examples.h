@@ -7,19 +7,47 @@ extern "C" {
 
 #include "buzzer_tones.h"
 
-enum song_list {
-    Eautopilot_disconnect,
-    Ereconnect,
-    Ewinxp,
-    Elaoda,
-    Estartup,
-    Eplug_in,
-    Eremove,
-    Eprotect
-};
+typedef enum {
+    BuzzerAutopilotDisconnect,
+    BuzzerLaunch,
+    BuzzerDjiStartup,
+    BuzzerWinxp,
+    BuzzerApproach,
+    BuzzerLaoda,
+    BuzzerStartup,
+    BuzzerPlugIn,
+    BuzzerRemove,
+    BuzzerError,
+    BuzzerProtect,
+    BuzzerChunriying
+} BuzzerSound;
 
 static note_t buzzer_warn[] = {
-        {659,  82},
+        {659, 82},
+};
+
+static note_t buzzer_haru[] = {
+        {587,  574},
+        {987,  561},
+        {987,  291},
+        {880,  290},
+        {880,  563},
+        {739,  294},
+        {739,  284},
+        {1108, 282},
+        {987,  286},
+        {1108, 287},
+        {1174, 573},
+        {587,  281},
+        {659,  281},
+        {739,  576},
+        {783,  288},
+        {880,  282},
+        {659,  576},
+        {587,  278},
+        {659,  293},
+        {659,  561},
+        {587,  1122},
 };
 
 static note_t buzzer_dont_say_lazy[] = {
@@ -3903,10 +3931,9 @@ static note_t buzzer_remove[] = {
 };
 
 static note_t buzzer_error[] = {
-        {NOTE_G5, 180},
-        {NOTE_D6, 170},
-        {NOTE_C6, 200},
-        {0,       100}
+        {391, 107},
+        {293, 107},
+        {195, 642},
 };
 
 static note_t buzzer_protect[] = {

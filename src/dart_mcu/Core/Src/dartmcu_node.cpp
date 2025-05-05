@@ -383,8 +383,8 @@ void subscription_buzzer_callback(const void *msgin) {
         case song_list::Elaoda:
             soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_laoda));
             break;
-        case song_list::Ewinxp:
-            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_winxp));
+        case song_list::Eharu:
+            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_haru));
             break;
         case song_list::Ereconnect:
             soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_dji_startup));
