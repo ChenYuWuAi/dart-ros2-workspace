@@ -3,8 +3,8 @@
 
 using json = nlohmann::json;
 
-NodeDartParamGateway::NodeDartParamGateway()
-    : rclcpp_lifecycle::LifecycleNode("node_dart_param_gateway")
+NodeDartParamGateway::NodeDartParamGateway(rclcpp::NodeOptions options)
+    : rclcpp_lifecycle::LifecycleNode("node_dart_param_gateway", options)
 {
 }
 
@@ -67,7 +67,7 @@ bool NodeDartParamGateway::save_params_to_file(std::string database_path)
     {
         try
         {
-            json param_json = current_dart_param_;
+            json param_json = target_dart_param_;
             dart_param_file << param_json.dump(4); // Pretty print with 4 spaces
             dart_param_file.close();
             RCLCPP_INFO(get_logger(), "Saved DartParams to file.");
@@ -83,7 +83,7 @@ bool NodeDartParamGateway::save_params_to_file(std::string database_path)
     {
         try
         {
-            json protocols_json = target_dart_param_;
+            json protocols_json = target_dart_protocols_;
             dart_protocols_file << protocols_json.dump(4); // Pretty print with 4 spaces
             dart_protocols_file.close();
             RCLCPP_INFO(get_logger(), "Saved DartProtocols to file.");
@@ -165,7 +165,6 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
         RCLCPP_ERROR(get_logger(), "Parameter 'param_database_path' not set.");
         return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
     }
-    start_daemon();
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
 
@@ -210,6 +209,8 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
             process_qr_code(msg);
         });
 
+    start_daemon();
+
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
 
@@ -250,7 +251,10 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
 int main(int argc, char **argv)
 {
     rclcpp::init(argc, argv);
-    auto node = std::make_shared<NodeDartParamGateway>();
+    auto options = rclcpp::NodeOptions().use_intra_process_comms(false);
+    options.automatically_declare_parameters_from_overrides(true);
+
+    auto node = std::make_shared<NodeDartParamGateway>(options);
     RCLCPP_INFO(node->get_logger(), "Node started. Spinning...");
     rclcpp::spin(node->get_node_base_interface());
     rclcpp::shutdown();

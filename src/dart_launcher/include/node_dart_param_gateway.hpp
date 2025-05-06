@@ -39,7 +39,8 @@ using json = nlohmann::json;
 class NodeDartParamGateway : public rclcpp_lifecycle::LifecycleNode
 {
 public:
-    NodeDartParamGateway();
+    NodeDartParamGateway() = default;
+    NodeDartParamGateway(rclcpp::NodeOptions options);
     ~NodeDartParamGateway();
     void load_and_save_default_value();
     bool load_params_from_file(std::string database_path);
