@@ -4,6 +4,9 @@
  */
 #ifndef NODE_DART_PARAM_GATEWAY_HPP
 #define NODE_DART_PARAM_GATEWAY_HPP
+
+#include <thread>
+
 // ROS2 Lifecycle Node
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
@@ -23,6 +26,10 @@
 // Json
 #include <nlohmann/json.hpp>
 
+#include "dart_comm_share/include/dart_launcher_param.h"
+#include "dart_mcu/Drivers/stm32-buzzer/src/buzzer_examples.h"
+#include "dart_comm_share/include/dart_launcher_default_value.hpp"
+
 using json = nlohmann::json;
 
 #ifndef CONFIG_PATH
@@ -34,7 +41,12 @@ class NodeDartParamGateway : public rclcpp_lifecycle::LifecycleNode
 public:
     NodeDartParamGateway();
     ~NodeDartParamGateway();
+    void load_and_save_default_value();
+    bool load_params_from_file(std::string database_path);
+    bool save_params_to_file(std::string database_path);
+    void start_daemon();
     rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn on_configure(const rclcpp_lifecycle::State &previous_state) override;
+    void process_qr_code(const std_msgs::msg::String::SharedPtr msg);
     rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn on_activate(const rclcpp_lifecycle::State &previous_state) override;
     rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn on_deactivate(const rclcpp_lifecycle::State &previous_state) override;
     rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn on_cleanup(const rclcpp_lifecycle::State &previous_state) override;
@@ -62,6 +74,9 @@ private:
     dart_msgs::msg::DartLauncherParams current_dart_protocols_, target_dart_protocols_;
     // Dart_status
     dart_msgs::msg::DartLauncherStatus dart_status_;
+
+    std::thread daemon_thread_;
+    bool daemon_running_;
 };
 
 #endif

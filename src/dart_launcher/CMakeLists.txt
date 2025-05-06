@@ -46,10 +46,11 @@ find_package(yaml-cpp REQUIRED)
 # ========== General Dependencies ==========
 
 include_directories(include)
+include_directories(..)
 
 # ========= Add Executables ==========
 # ==== Add node_dart_param_gateway target ====
-add_executable(node_dart_param_gateway src/node_dart_param_gateway.cpp)
+add_executable(node_dart_param_gateway src/node_dart_param_gateway.cpp ${CMAKE_CURRENT_LIST_DIR}/../dart_comm_share/src/dart_launcher_param.cpp)
 target_include_directories(node_dart_param_gateway PRIVATE thirdparty/json/include)
 target_link_directories(node_dart_param_gateway PRIVATE nlohmann_json::nlohmann_json)
 ament_target_dependencies(node_dart_param_gateway rclcpp std_msgs dart_msgs std_srvs rclcpp_lifecycle)
