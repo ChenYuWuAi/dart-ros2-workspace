@@ -58,6 +58,8 @@ private:
 
     // Dart_param
     dart_msgs::msg::DartLauncherParams current_dart_param_, target_dart_param_;
+    // Dart_protocols
+    dart_msgs::msg::DartLauncherParams current_dart_protocols_, target_dart_protocols_;
     // Dart_status
     dart_msgs::msg::DartLauncherStatus dart_status_;
 };
