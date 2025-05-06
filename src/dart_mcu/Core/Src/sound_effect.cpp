@@ -26,13 +26,14 @@ void SoundEffectManager::begin(
 
 shared_ptr<soundEffect_t>
 SoundEffectManager::addSoundEffect(
-        note_t *notes_, size_t notes_size_, bool emergency, bool circulating) {
+        note_t *notes_, size_t notes_size_, bool emergency, bool circulating, bool add_rest) {
     auto se = make_shared<soundEffect_t>();
     se->notes = notes_;
     se->notes_size = notes_size_;
     se->progress = 0;
     se->state = circulating ? SoundEffectState::READY_FOR_CIRCULATING
                             : SoundEffectState::READY;
+    se->add_rest = add_rest; // 新增参数
     if (emergency) {
         soundEffects_queue.insert(soundEffects_queue.begin(), se);
     } else {
@@ -67,13 +68,13 @@ void SoundEffectManager::timer_callback(void *pvParameters) {
     auto se = mgr->currentSoundEffect;
     if (!se) return;
 
-    // 总阶段数 = 音符数 × 2（播放 + 5ms 休止）
-    uint32_t total = se->notes_size * 2;
+    // 根据是否添加休止符计算总阶段数
+    uint32_t total = se->add_rest ? se->notes_size * 2 : se->notes_size;
     if (se->progress < total &&
         (se->state == SoundEffectState::PLAYING ||
          se->state == SoundEffectState::CIRCULATING)) {
-        bool rest = (se->progress & 1) != 0;
-        uint32_t idx = se->progress >> 1;
+        bool rest = se->add_rest && (se->progress & 1) != 0; // 判断是否为休止符阶段
+        uint32_t idx = se->add_rest ? (se->progress >> 1) : se->progress;
         uint32_t dur_ms;
         if (rest)
             dur_ms = 10;

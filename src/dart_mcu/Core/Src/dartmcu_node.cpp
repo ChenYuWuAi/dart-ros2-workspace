@@ -437,6 +437,15 @@ void choose_sound_effect(int index) {
         case BuzzerSound::BuzzerDontSayLazy:
             soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_dont_say_lazy));
             break;
+        case BuzzerSound::BuzzerInternetOverdose:
+            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_internet_overdose));
+            break;
+        case BuzzerSound::BuzzerInternetAngel:
+            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_internet_angel));
+            break;
+        case BuzzerSound::BuzzerIfICouldBeAConstelletionPlus:
+            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_if_i_could_be_a_constelletion_plus));
+            break;
         default:
             soundEffectManager.stopCurrentSoundEffect();
             break;
