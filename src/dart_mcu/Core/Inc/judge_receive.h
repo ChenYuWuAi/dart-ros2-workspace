@@ -7,8 +7,8 @@
 #include "task.h"
 
 #define REFEREE_DMA_SIZE (130)//一帧最长128字节（见通信协议），留两个字节防炸
-#define UART6_MAX_RECEIVE_BUFFER_LENGTH 300
-#define REFEREE_HUART huart6//改成自己兵种配置的串口
+#define UART3_MAX_RECEIVE_BUFFER_LENGTH 300
+#define REFEREE_HUART huart3//改成自己兵种配置的串口
 
 /*
 Version:2024.01.22
@@ -28,8 +28,8 @@ Version:2024.01.22
 #define EVENT_DATA               0X0101          //场地事件数据，事件改变后发送
 #define SUPPLY_PROJECTILE_ACTION 0X0102          //场地补给站动作标识数据，动作改变后发送
 //0X0103        //请求补给站补弹数据，由参赛队发送，上限 10Hz。RM对抗赛尚未开放，就没写
-#define REFEREE_WARNING         0X0104          //裁判警告数据，警告发生后发送 
-#define DART_INFO               0X0105          //飞镖发射口倒计时，1Hz 周期发送 
+#define REFEREE_WARNING         0X0104          //裁判警告数据，警告发生后发送
+#define DART_INFO               0X0105          //飞镖发射口倒计时，1Hz 周期发送
 #define ROBOT_STATUS            0X0201          //机器人状态数据，10Hz 周期发送
 #define POWER_HEAT_DATA         0X0202          //实时功率热量数据，50Hz 周期发送
 #define ROBOT_POS               0X0203          //机器人位置数据，1Hz 发送
@@ -72,28 +72,28 @@ Version:2024.01.22
 #define PROJECTILE_ALLOWANCE_DATA_SIZE  (6)//0X0208
 #define RFID_STATUS_DATA_SIZE            (4)//0X0209
 #define DART_CLIENT_CMD_DATA_SIZE       (6)//0X020A
-#define GROUND_ROBOT_POS_DATA_SIZE      (40)// 0X020B        
-#define RADAR_MARK_DATA_SIZE            (6) //0X020C        
-#define SENTRY_INFO_DATA_SIZE           (4) //0X020D         
-#define RADAR_INFO_DATA_SIZE            (1) //0X020E      
-#define ROBOT_INTERACTIONDATA_DATA_SIZE (118)//0X0301  
+#define GROUND_ROBOT_POS_DATA_SIZE      (40)// 0X020B
+#define RADAR_MARK_DATA_SIZE            (6) //0X020C
+#define SENTRY_INFO_DATA_SIZE           (4) //0X020D
+#define RADAR_INFO_DATA_SIZE            (1) //0X020E
+#define ROBOT_INTERACTIONDATA_DATA_SIZE (118)//0X0301
 //0X0301子内容长度：
-#define INTERACTION_LAYER_DELETE_DATA_SIZE   (2)  //0X0100 
-#define INTERACTION_FIGURE_DATA_SIZE         (15) //0X0101      
-#define INTERACTION_FIGURE_2_DATA_SIZE       (30) //0X0102     
-#define INTERACTION_FIGURE_3_DATA_SIZE       (75) //0X0103     
-#define INTERACTION_FIGURE_4_DATA_SIZE       (105)//0X0104      
-#define CILENT_CUSTOM_CHARATER_DATA_SIZE     (45) //0X0110     
+#define INTERACTION_LAYER_DELETE_DATA_SIZE   (2)  //0X0100
+#define INTERACTION_FIGURE_DATA_SIZE         (15) //0X0101
+#define INTERACTION_FIGURE_2_DATA_SIZE       (30) //0X0102
+#define INTERACTION_FIGURE_3_DATA_SIZE       (75) //0X0103
+#define INTERACTION_FIGURE_4_DATA_SIZE       (105)//0X0104
+#define CILENT_CUSTOM_CHARATER_DATA_SIZE     (45) //0X0110
 #define SENTRY_CMD_DATA_SIZE                 (4)  //0X0120
 #define RADAR_CMD_DATA_SIZE                  (1)  //0X121
 //结束
 #define CUSTOM_ROBOT_DATA_SIZE          (23)//长度30以内自定,可改长度 0X0302
 #define MAP_COMMAND_DATA_SIZE           (11)//0X0303
-#define REMOTE_CONTROL_DATA_SIZE        (12)//0X0304        
-#define MAP_ROBOT_DATA_SIZE             (10)//0X0305          
-#define CUSTOM_CLIENTDATA _DATA_SIZE    (8)//0X0306          
-#define MAP_DATA_DATA_SIZE              (103)//0X0307        
-#define CUSTOM_INFO_DATA_SIZE           (34)//0X0308          
+#define REMOTE_CONTROL_DATA_SIZE        (12)//0X0304
+#define MAP_ROBOT_DATA_SIZE             (10)//0X0305
+#define CUSTOM_CLIENTDATA _DATA_SIZE    (8)//0X0306
+#define MAP_DATA_DATA_SIZE              (103)//0X0307
+#define CUSTOM_INFO_DATA_SIZE           (34)//0X0308
 
 
 #define INTERACTIVEHEADER_DATA_SIZE(n) (n + 9)
@@ -206,7 +206,7 @@ typedef struct {
 
    bit 28-29：飞镖最后一次击中己方前哨站或基地的具体目标，开局默认为0，
   1为击中前哨站，2为击中基地固定目标，3为击中基地随机目标
- 
+
    bit 30-31：中心增益点的占领情况，0为未被占领，1为被己方占领，2为被
 对方占领，3为被双方占领。（仅 RMUL 适用）
     */
@@ -246,7 +246,7 @@ typedef struct {
 } ext_supply_projectile_action_t;
 
 //7. 裁判警告信息：cmd_id (0x0104)。发送频率：裁判警告数据，己方判罚/判负时
-//触发发送，其余时间以 1Hz 频率发送，发送范围：己方机器人。 
+//触发发送，其余时间以 1Hz 频率发送，发送范围：己方机器人。
 typedef struct {
     /*
     己方最后一次受到判罚的等级：
@@ -268,22 +268,22 @@ typedef struct {
     uint8_t count;
 } ext_referee_warning_t;
 
-//8. 飞镖状态信息：cmd_id (0x0105)。发送频率：1Hz 周期发送，发送范围：己方机器人。 
+//8. 飞镖状态信息：cmd_id (0x0105)。发送频率：1Hz 周期发送，发送范围：己方机器人。
 typedef struct {
     /*
       己方飞镖发射剩余时间，单位：秒
     */
-    uint8_t dart_remaining_time;   //15s 倒计时 
+    uint8_t dart_remaining_time;   //15s 倒计时
     /*
-    bit 0-1：
+    bit 0-2：
     最近一次己方飞镖击中的目标，开局默认为 0，1 为击中前哨站，2 为击中
-    基地固定目标，3 为击中基地随机目标
-    bit 2-4：
+    基地固定目标，3 为击中基地随机固定目标，4 为击中基地随机移动目标
+    bit 3-5：
     对方最近被击中的目标累计被击中计数，开局默认为 0，至多为 4
-    bit 5-6：
+    bit 6-7：
     飞镖此时选定的击打目标，开局默认或未选定/选定前哨站时为 0，选中基
-    地固定目标为 1，选中基地随机目标为 2
-bit 7-15：保留
+    地固定目标为 1，选中基地随机目标为 2，选中基地随机移动目标为3
+bit 8-15：保留
     */
     uint16_t dart_info;
 } ext_dart_info_t;
@@ -298,14 +298,14 @@ typedef struct {
     6：红方空中机器人；
     7：红方哨兵机器人；
     8：红方飞镖机器人；
-    9：红方雷达站；  
+    9：红方雷达站；
     101：蓝方英雄机器人；
     102：蓝方工程机器人；
     103/104/105：蓝方步兵机器人；
     106：蓝方空中机器人；
     107：蓝方哨兵机器人。
-    108：蓝方飞镖机器人； 
-    109：蓝方雷达站。 
+    108：蓝方飞镖机器人；
+    109：蓝方雷达站。
     */
     uint8_t robot_id;
 
@@ -448,14 +448,14 @@ typedef struct {
     float initial_speed;
 } ext_shoot_data_t;
 
-//16. 子弹剩余发射数：0x0208。发送频率：10Hz周期发送，所有机器人发送 
+//16. 子弹剩余发射数：0x0208。发送频率：10Hz周期发送，所有机器人发送
 typedef struct {
     uint16_t bullet_remaining_num_17mm;//17mm子弹剩余发射数目
     uint16_t bullet_remaining_num_42mm;//42mm子弹剩余发射数目
     uint16_t remaining_gold_coin;//剩余金币数量
 } ext_projectile_allowance_t;
 
-//17. 机器人 RFID 状态：0x0209。发送频率：3Hz，发送范围：单一机器人。 
+//17. 机器人 RFID 状态：0x0209。发送频率：3Hz，发送范围：单一机器人。
 typedef struct {
     /*
    bit 位值为 1/0 的含义：是否已检测到该增益点 RFID 卡
@@ -657,7 +657,7 @@ bit 14-31：根据绘制的图形不同，含义不同，详见“表 2-26 图�
     uint32_t width: 10;
     uint32_t start_x: 11;
     uint32_t start_y: 11;
-//图形配置3 根据绘制的图形不同，含义不同，详见“表 2-26 图形细节参数说明”   
+//图形配置3 根据绘制的图形不同，含义不同，详见“表 2-26 图形细节参数说明”
     uint32_t details_c: 10;
     uint32_t details_d: 11;
     uint32_t details_e: 11;
@@ -737,7 +737,7 @@ bit 2-12：
 bit 13-16：
 	哨兵远程兑换发弹量的请求次数，开局为0，修改此值即可请求远程兑换发弹量。
     此值的变化需要单调递增且每次仅能增加 1，否则视为不合法。
-	
+
 示例：此值开局仅能为0，此后哨兵可将其从0修改至1，则消
       耗金币远程兑换允许发弹量。此后哨兵可将其从1修改至2，以此类推。
 bit 17-20：哨兵远程兑换血量的请求次数，开局为0，修改此
@@ -993,5 +993,5 @@ void Append_CRC16_Check_Sum(uint8_t *pchMessage, uint32_t dwLength);
 
 /*--------------------------------------------------校验函数--------------------------------------------------*/
 
-extern uint8_t judge_rx_buffer[2][UART6_MAX_RECEIVE_BUFFER_LENGTH];
+extern uint8_t judge_rx_buffer[2][UART3_MAX_RECEIVE_BUFFER_LENGTH];
 #endif

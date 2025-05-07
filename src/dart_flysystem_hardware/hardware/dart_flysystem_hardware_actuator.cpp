@@ -374,7 +374,7 @@ namespace dart_flysystem_hardware
         buzzer_thread = std::thread([]()
                                          { play_songs(buzzer_autopilot_disconnect); });
 
-        buzzer_thread.detach();
+        buzzer_thread.join();
 
         return hardware_interface::CallbackReturn::SUCCESS;
     }

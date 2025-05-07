@@ -96,7 +96,6 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
@@ -134,7 +133,8 @@ int main(void)
     HAL_CAN_ActivateNotification(&hcan2, CAN_IT_RX_FIFO0_MSG_PENDING);
 
 
-  HAL_UARTEx_ReceiveToIdle_DMA(&huart1, uart1RecBuffer, UART1_MAX_RECEIVE_BUFFER_LENGTH);
+    HAL_UARTEx_ReceiveToIdle_DMA(&huart3, judge_rx_buffer[0], UART3_MAX_RECEIVE_BUFFER_LENGTH);
+    HAL_UARTEx_ReceiveToIdle_DMA(&huart1, uart1RecBuffer, UART1_MAX_RECEIVE_BUFFER_LENGTH);
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -222,7 +222,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size) {
         static uint8_t decode_memory_ = MEMORY0;
 
         HAL_UARTEx_ReceiveToIdle_DMA(&huart3, judge_rx_buffer[(decode_memory_ + 1) % 2],
-                                     UART6_MAX_RECEIVE_BUFFER_LENGTH);
+                                     UART3_MAX_RECEIVE_BUFFER_LENGTH);
         RefereeReceive(Size, judge_rx_buffer[decode_memory_]
         );
         decode_memory_ = (decode_memory_ + 1) % 2;
@@ -240,6 +240,20 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
         huart->RxState = HAL_UART_STATE_READY;
     }
 }
+
+/**
+ * @brief 在此函数中添加自动恢复逻辑
+ */
+
+void HAL_CAN_ErrorCallback(CAN_HandleTypeDef *hcan) {
+    uint32_t err = HAL_CAN_GetError(hcan);  // 获取错误码 :contentReference[oaicite:6]{index=6}
+
+    // 检测到 Bus-Off 错误
+    if (err & HAL_CAN_ERROR_BOF) {
+        reboot_can(hcan);
+    }
+}
+
 
 // CAN接收中断
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
@@ -270,10 +284,6 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
         switch (RxHeader.StdId) {
             case 0x208: {
                 motor::MotorYawLS.decodeCanMsg(&RxHeader, aData);
-                break;
-            }
-            case 0x209: {
-                motor::MotorPitchLS.decodeCanMsg(&RxHeader, aData);
                 break;
             }
             default: {

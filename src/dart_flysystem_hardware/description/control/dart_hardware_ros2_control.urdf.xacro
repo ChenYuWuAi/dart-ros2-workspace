@@ -60,9 +60,9 @@
                 <!-- pwm9@fe6f0010 -->
                 <param name="pwm_chip">1</param>
                 <param name="pwm_channel"> 0</param>
-                <param name="default_velocity">0.1</param>
-                <param name="max_velocity_duty_cycle_percentage">80</param>
-                <param name="min_velocity_duty_cycle_percentage">62</param>
+                <param name="default_velocity">0</param>
+                <param name="max_velocity_duty_cycle_percentage">99</param>
+                <param name="min_velocity_duty_cycle_percentage">60</param>
                 <param name="pwm_frequency">500</param>
             </joint>
 

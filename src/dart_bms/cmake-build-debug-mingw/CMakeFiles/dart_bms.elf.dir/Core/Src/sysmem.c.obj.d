@@ -1,0 +1,21 @@
+CMakeFiles/dart_bms.elf.dir/Core/Src/sysmem.c.obj: \
+ D:\Material\Program\Robomaster\dart-ros2-workspace\src\dart_bms\Core\Src\sysmem.c \
+ D:/Tool/arm-none-eabi/arm-none-eabi/include/errno.h \
+ D:/Tool/arm-none-eabi/arm-none-eabi/include/sys/errno.h \
+ D:/Tool/arm-none-eabi/arm-none-eabi/include/sys/reent.h \
+ D:/Tool/arm-none-eabi/arm-none-eabi/include/_ansi.h \
+ D:/Tool/arm-none-eabi/arm-none-eabi/include/newlib.h \
+ D:/Tool/arm-none-eabi/arm-none-eabi/include/_newlib_version.h \
+ D:/Tool/arm-none-eabi/arm-none-eabi/include/sys/config.h \
+ D:/Tool/arm-none-eabi/arm-none-eabi/include/machine/ieeefp.h \
+ D:/Tool/arm-none-eabi/arm-none-eabi/include/sys/features.h \
+ D:/Tool/arm-none-eabi/lib/gcc/arm-none-eabi/14.2.1/include/stddef.h \
+ D:/Tool/arm-none-eabi/arm-none-eabi/include/sys/cdefs.h \
+ D:/Tool/arm-none-eabi/arm-none-eabi/include/machine/_default_types.h \
+ D:/Tool/arm-none-eabi/arm-none-eabi/include/sys/_types.h \
+ D:/Tool/arm-none-eabi/arm-none-eabi/include/machine/_types.h \
+ D:/Tool/arm-none-eabi/arm-none-eabi/include/sys/lock.h \
+ D:/Tool/arm-none-eabi/lib/gcc/arm-none-eabi/14.2.1/include/stdint.h \
+ D:/Tool/arm-none-eabi/arm-none-eabi/include/stdint.h \
+ D:/Tool/arm-none-eabi/arm-none-eabi/include/sys/_intsup.h \
+ D:/Tool/arm-none-eabi/arm-none-eabi/include/sys/_stdint.h

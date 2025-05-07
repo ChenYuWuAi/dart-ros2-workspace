@@ -1,0 +1,36 @@
+/dart_launcher_detector:
+  ros__parameters:
+    lccv:
+      enable: true
+      image_width: 1640
+      image_height: 1232
+      camera_params:
+        Resolution: [1640, 1232]
+    dh:
+      enable: true
+      image_width: 1280
+      image_height: 1024
+      camera_params:
+        FPS: 15
+        ExposureTime: 30
+        Gain: 1.0
+        Gamma: 1.0
+        BalanceRatio: [1.0, 1.6, 1.3, 2.0]
+        Resolution: [1280, 1024]
+    detect:
+      greenlight_detect:
+        hmin: 53
+        hmax: 79
+        smin: 61
+        smax: 255
+        vmin: 57
+        vmax: 255
+        minDist: 148
+        rmin: 5
+        rmax: 89
+        param1: 24
+        param2: 24
+      qr_detect:
+        binThreshold: 39
+        save_image:
+          enable: false

@@ -22,7 +22,7 @@
 #define __STM32L0xx_IT_H
 
 #ifdef __cplusplus
- extern "C" {
+extern "C" {
 #endif
 
 /* Private includes ----------------------------------------------------------*/
@@ -52,6 +52,7 @@ void SVC_Handler(void);
 void PendSV_Handler(void);
 void SysTick_Handler(void);
 void TIM2_IRQHandler(void);
+void TIM21_IRQHandler(void);
 void I2C1_IRQHandler(void);
 /* USER CODE BEGIN EFP */
 

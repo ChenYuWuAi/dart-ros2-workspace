@@ -4,7 +4,7 @@
 
 #include "servo.h"
 
-servo trigger_servo[2];
+servo trigger_servo[7];
 
 void servo::begin(TIM_HandleTypeDef *htim, uint32_t channel, uint32_t timerClock, uint32_t minPulseWidth, uint32_t maxPulseWidth, uint16_t minAngle, uint16_t maxAngle, uint32_t pwm_period, uint32_t pwm_frequency, uint16_t initialAngle) {
     pwm_.configure(htim, channel, timerClock, pwm_period, pwm_frequency);

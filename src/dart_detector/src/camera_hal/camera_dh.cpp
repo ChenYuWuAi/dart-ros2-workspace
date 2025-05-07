@@ -29,6 +29,11 @@ bool CameraDriver_DH::open(std::unordered_map<std::string, std::string> &params)
         return true;
     }
 
+    if(!_videoCapture->discovery())
+    {
+        return false;
+    }
+
     if (IS_PARAM_SET("id"))
     {
         id = std::stoi(params["id"]);
@@ -61,16 +66,29 @@ bool CameraDriver_DH::open(std::unordered_map<std::string, std::string> &params)
 
 bool CameraDriver_DH::write(std::string para_name, std::string para_value)
 {
+    if (!isOpened)
+    {
+        return false;
+    }
     return _videoCapture->write(para_name, para_value);
 }
 
 bool CameraDriver_DH::read(cv::Mat &image)
 {
+    if (!isOpened)
+    {
+        return false;
+    }
     return _videoCapture->read(image);
 }
 
 bool CameraDriver_DH::close()
 {
+    if(!isOpened)
+    {
+        return true;
+    }
+
     if (!_videoCapture->closeStream())
     {
         return false;

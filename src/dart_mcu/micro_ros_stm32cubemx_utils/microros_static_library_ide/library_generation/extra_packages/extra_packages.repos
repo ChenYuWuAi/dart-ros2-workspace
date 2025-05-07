@@ -1,0 +1,5 @@
+repositories:
+  dart_msgs:
+    type: git
+    url: https://github.com/ChenYuWuAi/dart_comm_share
+    version: main

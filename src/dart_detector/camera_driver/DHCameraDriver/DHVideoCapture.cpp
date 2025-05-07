@@ -18,6 +18,20 @@ using namespace cv;
 using namespace Dahua::GenICam;
 using namespace Dahua::Infra;
 
+bool DHVideoCapture::discovery()
+{
+    bool isDiscoverySuccess = _systemObj.discovery(_vCameraPtrList);
+    if (!isDiscoverySuccess)
+    {
+        return false;
+    }
+    if (_vCameraPtrList.size() == 0)
+    {
+        return false;
+    }
+    return true;
+}
+
 DHVideoCapture::DHVideoCapture()
 {
     bool isDiscoverySuccess = _systemObj.discovery(_vCameraPtrList);
@@ -44,10 +58,11 @@ DHVideoCapture::DHVideoCapture()
 
 DHVideoCapture::~DHVideoCapture()
 {
-    if (!_cameraSptr->disConnect())
-    {
-        printf("disConnect camera failed\n");
-    }
+    if (_cameraSptr)
+        if (!_cameraSptr->disConnect())
+        {
+            printf("disConnect camera failed\n");
+        }
     delete[] _resolution;
     delete[] _balance_ratio;
 }
@@ -81,139 +96,38 @@ bool DHVideoCapture::open(const int id, int size_buffer)
 
 bool DHVideoCapture::write(string para_name, string para_value)
 {
-    if (para_name == "Width")
+    std::cout << "write para_name: " << para_name << " para_value: " << para_value << std::endl;
+    if (para_name == "Resolution")
     {
-        unsigned long int width = atoi(para_value.c_str());
-        if (width == _resolution[0])
-            return true;
+        // 用isstream读取数字 需要两个参数 width height 用逗号分隔！
+        istringstream iss(para_value);
+        int width, height;
+        iss >> width;
+        if (iss)
+        {
+            iss >> height;
+        }
         else
         {
-            int32_t bRet;
-            IImageFormatControlPtr sptrImageFormatControl = CSystem::getInstance().createImageFormatControl(_cameraSptr);
-            if (NULL == sptrImageFormatControl)
-            {
-                return false;
-            }
-
-            CIntNode intNode = sptrImageFormatControl->width();
-            bRet = intNode.setValue(width);
-            if (false == bRet)
-            {
-                printf("set width fail.\n");
-                return false;
-            }
-            intNode = sptrImageFormatControl->offsetX();
-            bRet = intNode.setValue((1280 - width) / 2);
-            if (!bRet)
-            {
-                printf("set offsetX fail.\n");
-                return false;
-            }
-            _resolution[0] = width;
-            return true;
+            std::cout << "failed to parse string to width!";
         }
-    }
-    else if (para_name == "Height")
-    {
-        unsigned long int height = atoi(para_value.c_str());
-        if (height == _resolution[1])
-            return true;
-        else
+        if (iss.fail())
         {
-            int32_t bRet;
-            IImageFormatControlPtr sptrImageFormatControl = CSystem::getInstance().createImageFormatControl(_cameraSptr);
-            if (NULL == sptrImageFormatControl)
-            {
-                return false;
-            }
-
-            CIntNode intNode = sptrImageFormatControl->height();
-            bRet = intNode.setValue(height);
-            if (false == bRet)
-            {
-                printf("set height fail.\n");
-                return false;
-            }
-            intNode = sptrImageFormatControl->offsetY();
-            bRet = intNode.setValue((1080 - height) / 2);
-            if (!bRet)
-            {
-                printf("set offsetY fail.\n");
-                return false;
-            }
-            _resolution[1] = height;
-            return true;
+            "Error:expected string transformation";
+            return false;
         }
+
+        return setVideoFormat(width, height);
     }
     else if (para_name == "ExposureTime")
     {
-        bool bRet;
-
-        IAcquisitionControlPtr sptrAcquisitionControl = CSystem::getInstance().createAcquisitionControl(_cameraSptr);
-        if (NULL == sptrAcquisitionControl)
-        {
-            return false;
-        }
-        unsigned long int t = atoi(para_value.c_str());
-        if (t == 0)
-        {
-            CEnumNode enumNode = sptrAcquisitionControl->exposureAuto();
-            bRet = enumNode.setValueBySymbol("Continuous");
-            if (false == bRet)
-            {
-                printf("set exposureAuto fail.\n");
-                return false;
-            }
-        }
-        else
-        {
-            CEnumNode enumNode = sptrAcquisitionControl->exposureAuto();
-            bRet = enumNode.setValueBySymbol("Off");
-            if (false == bRet)
-            {
-                printf("set exposureAuto fail.\n");
-                return false;
-            }
-            t *= 1000;
-            CDoubleNode doubleNode = sptrAcquisitionControl->exposureTime();
-            bRet = doubleNode.setValue(t);
-            if (false == bRet)
-            {
-                printf("set exposureTime fail.\n");
-                return false;
-            }
-            _exposure_time = t / 1000;
-        }
-        return true;
+        int exposure_time = std::stoi(para_value);
+        return setExposureTime(exposure_time);
     }
-    else if (para_name == "fps")
+    else if (para_name == "FPS")
     {
         double fps = std::stod(para_value);
-        if (fps == _fps)
-            return true;
-        bool bRet;
-        IAcquisitionControlPtr sptAcquisitionControl = CSystem::getInstance().createAcquisitionControl(_cameraSptr);
-        if (NULL == sptAcquisitionControl)
-        {
-            return false;
-        }
-
-        CBoolNode booleanNode = sptAcquisitionControl->acquisitionFrameRateEnable();
-        bRet = booleanNode.setValue(true);
-        if (false == bRet)
-        {
-            printf("set acquisitionFrameRateEnable fail step 1.\n");
-            return false;
-        }
-
-        CDoubleNode doubleNode = sptAcquisitionControl->acquisitionFrameRate();
-        bRet = doubleNode.setValue(fps);
-        if (false == bRet)
-        {
-            printf("set acquisitionFrameRate fail.step 2\n");
-            return false;
-        }
-        return true;
+        return setFPS(fps);
     }
     else if (para_name == "BalanceRatio")
     {
@@ -221,10 +135,10 @@ bool DHVideoCapture::write(string para_name, string para_value)
         istringstream iss(para_value);
         double red, green, blue;
         bool autoBalance;
-        iss >> red;
+        iss >> autoBalance;
         if (iss)
         {
-            iss >> green;
+            iss >> red;
         }
         else
         {
@@ -232,7 +146,7 @@ bool DHVideoCapture::write(string para_name, string para_value)
         }
         if (iss)
         {
-            iss >> blue;
+            iss >> green;
         }
         else
         {
@@ -240,7 +154,7 @@ bool DHVideoCapture::write(string para_name, string para_value)
         }
         if (iss)
         {
-            iss >> autoBalance;
+            iss >> blue;
         }
         else
         {
@@ -251,134 +165,17 @@ bool DHVideoCapture::write(string para_name, string para_value)
             "Error:expected string transformation";
             return false;
         }
-        if (red == _balance_ratio[0] && green == _balance_ratio[1] && blue == _balance_ratio[2])
-            return true;
-        //    auto t1 = chrono::high_resolution_clock::now();
-        bool bRet;
-        IAnalogControlPtr sptrAnalogControl = CSystem::getInstance().createAnalogControl(_cameraSptr);
-        if (NULL == sptrAnalogControl)
-        {
-            return false;
-        }
-
-        /* 关闭自动白平衡 */
-        CEnumNode enumNode = sptrAnalogControl->balanceWhiteAuto();
-        if (false == enumNode.isReadable())
-        {
-            printf("balanceRatio not support.\n");
-            return false;
-        }
-
-        if (autoBalance == true)
-        {
-            bRet = enumNode.setValueBySymbol("Continuous");
-            if (false == bRet)
-            {
-                printf("set balanceWhiteAuto On(Continuous) fail.\n");
-                return false;
-            }
-            _balance_ratio[0] = _balance_ratio[1] = _balance_ratio[2] = -1;
-        }
-        else
-        {
-            bRet = enumNode.setValueBySymbol("Off");
-            if (false == bRet)
-            {
-                printf("set balanceWhiteAuto Off fail.\n");
-                return false;
-            }
-
-            CDoubleNode doubleNode = sptrAnalogControl->balanceRatio();
-            bRet = doubleNode.setValue(red);
-            if (false == bRet)
-            {
-                printf("set red balanceRatio fail.\n");
-                return false;
-            }
-            _balance_ratio[0] = red;
-
-            enumNode = sptrAnalogControl->balanceRatioSelector();
-            bRet = enumNode.setValueBySymbol("Green");
-            if (false == bRet)
-            {
-                printf("set green balanceRatioSelector fail.\n");
-                return false;
-            }
-
-            doubleNode = sptrAnalogControl->balanceRatio();
-            bRet = doubleNode.setValue(green);
-            if (false == bRet)
-            {
-                printf("set green balanceRatio fail.\n");
-                return false;
-            }
-            _balance_ratio[1] = green;
-
-            enumNode = sptrAnalogControl->balanceRatioSelector();
-            bRet = enumNode.setValueBySymbol("Blue");
-            if (false == bRet)
-            {
-                printf("set blue balanceRatioSelector fail.\n");
-                return false;
-            }
-
-            doubleNode = sptrAnalogControl->balanceRatio();
-            bRet = doubleNode.setValue(blue);
-            if (false == bRet)
-            {
-                printf("set blue balanceRatio fail.\n");
-                return false;
-            }
-            _balance_ratio[2] = blue;
-        }
-        //    auto t2 = chrono::high_resolution_clock::now();
-        //    cout << "Capture period: " <<
-        //(static_cast<chrono::duration<double, std::milli>>(t2 - t1)).count() << " ms" << endl;
-        return true;
+        return setBalanceRatio(red, green, blue, autoBalance);
     }
     else if (para_name == "Gamma")
     {
         double gamma = std::stod(para_value);
-        if (gamma == _gamma)
-            return true;
-        bool bRet;
-        IAnalogControlPtr sptrAnalogControl = CSystem::getInstance().createAnalogControl(_cameraSptr);
-        if (NULL == sptrAnalogControl)
-        {
-            return false;
-        }
-
-        CDoubleNode doubleNode = sptrAnalogControl->gamma();
-        bRet = doubleNode.setValue(gamma);
-        if (false == bRet)
-        {
-            printf("set gamma fail.\n");
-            return false;
-        }
-        _gamma = gamma;
-        return true;
+        return setGamma(gamma);
     }
     else if (para_name == "Gain")
     {
         double gain = std::stod(para_value);
-        if (gain == _gain)
-            return true;
-        bool bRet;
-        IAnalogControlPtr sptrAnalogControl = CSystem::getInstance().createAnalogControl(_cameraSptr);
-        if (NULL == sptrAnalogControl)
-        {
-            return false;
-        }
-
-        CDoubleNode doubleNode = sptrAnalogControl->gainRaw();
-        bRet = doubleNode.setValue(gain);
-        if (false == bRet)
-        {
-            printf("get gainRaw fail.\n");
-            return false;
-        }
-        _gain = gain;
-        return true;
+        return setGain(gain);
     }
 }
 

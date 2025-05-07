@@ -1,0 +1,83 @@
+/**
+ * @file node_dart_param_gateway.hpp
+ * @brief NodeDartParamGateway 类头文件
+ */
+#ifndef NODE_DART_PARAM_GATEWAY_HPP
+#define NODE_DART_PARAM_GATEWAY_HPP
+
+#include <thread>
+
+// ROS2 Lifecycle Node
+#include <rclcpp/rclcpp.hpp>
+#include <rclcpp_lifecycle/lifecycle_node.hpp>
+
+// Std_msg
+#include <std_msgs/msg/string.hpp>
+#include <std_msgs/msg/int32.hpp>
+
+// Dart_msg
+#include <dart_msgs/msg/dart_launcher_params.hpp>
+#include <dart_msgs/msg/dart_launcher_status.hpp>
+#include <dart_msgs/msg/green_light.hpp>
+
+// ROS2 Service
+#include <std_srvs/srv/empty.hpp>
+
+// Json
+#include <nlohmann/json.hpp>
+
+#include "dart_comm_share/include/dart_launcher_param.h"
+#include "dart_mcu/Drivers/stm32-buzzer/src/buzzer_examples.h"
+#include "dart_comm_share/include/dart_launcher_default_value.hpp"
+
+using json = nlohmann::json;
+
+#ifndef CONFIG_PATH
+#define CONFIG_PATH "/home/chenyu/dart-ros2-workspace/install/dart_launcher/share/dart_launcher/config" + "dart_launcher_params.json"
+#endif
+
+class NodeDartParamGateway : public rclcpp_lifecycle::LifecycleNode
+{
+public:
+    NodeDartParamGateway() = default;
+    NodeDartParamGateway(rclcpp::NodeOptions options);
+    ~NodeDartParamGateway();
+    void load_and_save_default_value();
+    bool load_params_from_file(std::string database_path);
+    bool save_params_to_file(std::string database_path);
+    void start_daemon();
+    rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn on_configure(const rclcpp_lifecycle::State &previous_state) override;
+    void process_qr_code(const std_msgs::msg::String::SharedPtr msg);
+    rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn on_activate(const rclcpp_lifecycle::State &previous_state) override;
+    rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn on_deactivate(const rclcpp_lifecycle::State &previous_state) override;
+    rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn on_cleanup(const rclcpp_lifecycle::State &previous_state) override;
+    rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn on_shutdown(const rclcpp_lifecycle::State &previous_state) override;
+    rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn on_error(const rclcpp_lifecycle::State &previous_state) override;
+
+private:
+    // ROS2 Lifecycle Node
+    rclcpp::Node::SharedPtr node_;
+
+    // Publisher
+    rclcpp::Publisher<dart_msgs::msg::DartLauncherParams>::SharedPtr dart_param_pub_;
+    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr dart_buzzer_cmd_pub_;
+    // Subscriber
+    // for string json params
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr dart_qr_param_sub_;
+    // for launcher param subscription
+    rclcpp::Subscription<dart_msgs::msg::DartLauncherParams>::SharedPtr dart_param_sub_;
+    // for greenlight detector
+    rclcpp::Subscription<dart_msgs::msg::GreenLight>::SharedPtr greenlight_sub_;
+
+    // Dart_param
+    dart_msgs::msg::DartLauncherParams current_dart_param_, target_dart_param_;
+    // Dart_protocols
+    dart_msgs::msg::DartLauncherParams current_dart_protocols_, target_dart_protocols_;
+    // Dart_status
+    dart_msgs::msg::DartLauncherStatus dart_status_;
+
+    std::thread daemon_thread_;
+    bool daemon_running_;
+};
+
+#endif

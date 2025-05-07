@@ -229,7 +229,6 @@ void MX_TIM8_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN TIM8_Init 2 */
-
   /* USER CODE END TIM8_Init 2 */
 
 }

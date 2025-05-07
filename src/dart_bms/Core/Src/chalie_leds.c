@@ -116,6 +116,13 @@ void chalie_led_code(uint8_t code) {
             led_state[2] = LED_ON;
             led_state[3] = LED_ON;
             break;
+        default:
+            led_state[0] = LED_ON;
+            led_state[1] = LED_ON;
+            led_state[2] = LED_ON;
+            led_state[3] = LED_ON;
+            break;
+
     }
 }
 

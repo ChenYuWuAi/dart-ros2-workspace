@@ -5,7 +5,6 @@
 #include "micro_switch.h"
 
 E_Lead_Screw_Switch_State yaw_switch_state;
-E_Lead_Screw_Switch_State pitch_switch_state;
 E_Lead_Screw_Switch_State trigger_switch_state;
 
 // 使用消抖状态机：
@@ -42,6 +41,5 @@ E_Lead_Screw_Switch_State trigger_switch_state;
 // 消抖读取
 void micro_switch_read() {
     read_switch_state_debounce_time(Yaw_Switch_GPIO_Port, Yaw_Switch_Pin, yaw_switch_state);
-    read_switch_state_debounce_time(Pitch_Switch_GPIO_Port, Pitch_Switch_Pin, pitch_switch_state);
     // read_switch_state_debounce_time(Trigger_Switch_GPIO_Port, Trigger_Switch_Pin, trigger_switch_state);
 }

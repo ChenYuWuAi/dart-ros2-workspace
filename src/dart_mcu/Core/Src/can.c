@@ -55,7 +55,6 @@ void MX_CAN1_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN CAN1_Init 2 */
-
   /* USER CODE END CAN1_Init 2 */
 
 }
@@ -214,5 +213,47 @@ void HAL_CAN_MspDeInit(CAN_HandleTypeDef* canHandle)
 }
 
 /* USER CODE BEGIN 1 */
+void reboot_can(CAN_HandleTypeDef * hcan){
+    // 停止 CAN 外设，进入初始化模式 :contentReference[oaicite:7]{index=7}
+    HAL_CAN_Stop(hcan);
+    // 反初始化 CAN（清寄存器、滤波器、错误标志）
+    HAL_CAN_DeInit(hcan);
 
+    // 小延时，确保硬件稳定（可根据总线情况调整）
+    HAL_Delay(10);
+
+    // 重新初始化（时钟、波特率、滤波器等）
+    if (hcan->Instance == hcan1.Instance)
+        MX_CAN1_Init();
+    else if (hcan->Instance == hcan2.Instance)
+        MX_CAN2_Init();
+
+    // 重新启动 CAN 总线 :contentReference[oaicite:8]{index=8}
+    if (HAL_CAN_Start(hcan) != HAL_OK) {
+        // 启动失败，可再次尝试或记录日志
+    }
+
+    // 重新使能接收中断/通知
+    CAN_FilterTypeDef sFilterConfig;
+
+    sFilterConfig.FilterBank = 0;
+    sFilterConfig.FilterMode = CAN_FILTERMODE_IDMASK;
+    sFilterConfig.FilterScale = CAN_FILTERSCALE_32BIT;
+    sFilterConfig.FilterIdHigh = 0x0000;
+    sFilterConfig.FilterIdLow = 0x0000;
+    sFilterConfig.FilterMaskIdHigh = 0x0000;
+    sFilterConfig.FilterMaskIdLow = 0x0000;
+    sFilterConfig.FilterFIFOAssignment = CAN_RX_FIFO0;
+    sFilterConfig.FilterActivation = ENABLE;
+    sFilterConfig.SlaveStartFilterBank = 14;
+    HAL_CAN_ConfigFilter(&hcan1, &sFilterConfig);
+    HAL_CAN_Start(&hcan1);
+    HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING);
+
+    sFilterConfig.FilterBank = 14;
+    HAL_CAN_ConfigFilter(&hcan2, &sFilterConfig);
+    HAL_CAN_Start(&hcan2);
+    HAL_CAN_ActivateNotification(&hcan2, CAN_IT_RX_FIFO0_MSG_PENDING);
+
+}
 /* USER CODE END 1 */

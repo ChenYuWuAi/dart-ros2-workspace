@@ -13,7 +13,8 @@
 namespace meter {
     enum velocimeter_state {
         IDLE,
-        READY,
+        CONTINOUS,
+        ONESHOT,
         MEASURING
     };
 
@@ -21,6 +22,7 @@ namespace meter {
     private:
         TIM_HandleTypeDef *htim_begin;
         velocimeter_state state = IDLE;
+        velocimeter_state prev_state = IDLE;
         uint32_t refresh_counter_timer;
         uint32_t update_count_begin;
         uint32_t update_count_end;
@@ -47,7 +49,14 @@ namespace meter {
 
         void onCaptureEnd(uint32_t count);
 
+        void reset();
 
+        void disable();
+
+        uint32_t channel_begin;
+        uint32_t channel_end;
+
+        void enable(bool oneshot = true);
     };
 
     // 全局变量

@@ -31,7 +31,7 @@ void chalie_leds_init(void); // Init Gpio
 void chalie_leds_set(uint16_t led, GPIO_PinState state); // Set led state
 
 /**
- * @param code 0-7， 0%~12.5% 12.5%~25% 25%~37.5% 37.5%~50% 50%~62.5% 62.5%~75% 75%~87.5% 87.5%~100%
+ * @param code 0-7le， 0%~12.5% 12.5%~25% 25%~37.5% 37.5%~50% 50%~62.5% 62.5%~75% 75%~87.5% 87.5%~100%
  */
 void chalie_led_code(uint8_t code); // Show code on leds
 

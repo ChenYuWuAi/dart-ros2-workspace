@@ -1,1 +1,0 @@
-GEN_CSRCS += _logo_3SE_1024x600.c

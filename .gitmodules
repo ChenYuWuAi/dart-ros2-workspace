@@ -4,3 +4,17 @@
 [submodule "src/vision_opencv"]
 	path = src/vision_opencv
 	url = git@github.com:ros-perception/vision_opencv.git
+[submodule "src/dart_detector/camera_driver/LCCV"]
+	path = src/dart_detector/camera_driver/LCCV
+	url = git@github.com:kbarni/LCCV.git
+[submodule "src/dart_launcher/lvgl"]
+	path = src/dart_launcher/thirdparty/lvgl
+	url = git@github.com:lvgl/lvgl.git
+	branch = c1205ad48
+[submodule "src/dart_launcher/thirdparty/json"]
+	path = src/dart_launcher/thirdparty/json
+	url = git@github.com:nlohmann/json.git
+	branch = master
+[submodule "src/dart_comm_share"]
+	path = src/dart_comm_share
+	url = git@github.com:ChenYuWuAi/dart_comm_share.git

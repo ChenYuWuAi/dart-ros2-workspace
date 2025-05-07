@@ -10,10 +10,12 @@ if (motor_.motor_state_ == motor::RUNNING) { \
 motor_.setCurrent(motor_controller_.update()); \
 } else { \
 motor_controller_.reset(); \
+motor_.target_current_=0; \
 }
 
-namespace motor_controller {
-    pid_angle_velocity_controller<double> MotorTriggerLSController(
+namespace motor_controller
+{
+     pid_angle_velocity_controller<double> MotorTriggerLSController(
         pid_controller<double>(10, 0.2, 0.01, 10000, 5000, 5000, 6000),
         pid_controller<double>(0.1, 0.01, 0.01, 100, 10000, 10000, 5000),
         &motor::MotorTriggerLS,
@@ -24,13 +26,6 @@ namespace motor_controller {
         pid_controller<double>(13, 0.3, 0.1, 360000, 4300, 13000, 16386),
         pid_controller<double>(0.4, 0, 0.01, 200000, 10000, 200, 100),
         &motor::MotorYawLS,
-        VELOCITY_CONTROL
-    );
-
-    pid_angle_velocity_controller<double> MotorPitchLSController(
-        pid_controller<double>(13, 0.3, 0.1, 360000, 4300, 13000, 16384),
-        pid_controller<double>(0.4, 0, 0.01, 200000, 10000, 200, 200),
-        &motor::MotorPitchLS,
         VELOCITY_CONTROL
     );
 
@@ -47,7 +42,12 @@ namespace motor_controller {
             &motor::MotorLoad[1],
             VELOCITY_CONTROL
         )
+
     };
+
+
+    pid_controller<double> AutoAimController = pid_controller<double>(20, 5.0, 0.0, 100000.0, 50000.0, 300000.0,
+                                                                            100000.0);
 
     double motor_load_sync_offset = 0;
     pid_controller<double> MotorLoadSyncController = pid_controller<double>(0.05, 0.07, 0.1, 1000.0, 500.0, 300.0,
@@ -143,7 +143,6 @@ namespace motor_controller {
         // Create Motors
         motor::MotorTriggerLS.create(10000, motor::E_MotorType::M2006, 1, true); // 扳机丝杆电机
         motor::MotorYawLS.create(16384, motor::E_MotorType::GM6020, 4); // 偏航丝杆电机
-        motor::MotorPitchLS.create(16384, motor::E_MotorType::GM6020, 5, true); // 俯仰丝杆电机
         motor::MotorLoad[0].create(16384, motor::E_MotorType::M3508, 2); // 装填电机1
         motor::MotorLoad[1].create(16384, motor::E_MotorType::M3508, 3, true); // 装填电机2
 
@@ -151,8 +150,7 @@ namespace motor_controller {
         while (motor::MotorYawLS.motor_state_ == motor::E_MotorState::DISCONNECTED ||
                motor::MotorLoad[0].motor_state_ == motor::E_MotorState::DISCONNECTED ||
                motor::MotorLoad[1].motor_state_ == motor::E_MotorState::DISCONNECTED ||
-               motor::MotorTriggerLS.motor_state_ == motor::E_MotorState::DISCONNECTED ||
-               motor::MotorPitchLS.motor_state_ == motor::E_MotorState::DISCONNECTED)
+               motor::MotorTriggerLS.motor_state_ == motor::E_MotorState::DISCONNECTED)
             vTaskDelayUntil(&xLastWakeTime, 100);
 
         while (true) {
@@ -175,8 +173,6 @@ namespace motor_controller {
                 memset(can_array, 0, 8);
                 tx_header.StdId = 0x2fe;
                 // Update Controller
-                update_controller_current(motor::MotorPitchLS, MotorPitchLSController);
-                motor::update_can_array(can_array, 0, motor::MotorPitchLS.updateCurrent());
                 HAL_CAN_AddTxMessage(&hcan2, &tx_header, can_array, &tx_mailbox);
 
                 memset(can_array, 0, 8);
@@ -187,10 +183,11 @@ namespace motor_controller {
             } {
                 // 更新同步控制器
                 MotorLoadSyncController.update(motor_controller::MotorLoadController[0].current_angle_with_rounds_ -
-                                               motor_controller::MotorLoadController[1].current_angle_with_rounds_);
+                                               motor_controller::MotorLoadController[1].current_angle_with_rounds_ - motor_load_sync_offset);
             }
             vTaskDelayUntil(&xLastWakeTime, 1);
         }
+
         vTaskDelete(nullptr);
     }
 }

@@ -1,0 +1,7 @@
+.mxproject
+Makefile
+*.s
+*.ld
+build
+.vscode
+custombuild

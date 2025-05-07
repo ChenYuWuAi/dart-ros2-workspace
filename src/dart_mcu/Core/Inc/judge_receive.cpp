@@ -77,11 +77,12 @@ ext_remote_control_t ext_remote_control;//0X0304
 ext_custom_client_data_t ext_custom_client_data;//0X0306
 TickType_t ext_judge_last_receive_time = 0;
 
-uint8_t judge_rx_buffer[2][UART6_MAX_RECEIVE_BUFFER_LENGTH];
+uint8_t judge_rx_buffer[2][UART3_MAX_RECEIVE_BUFFER_LENGTH];
 
 void judge_Reset(){
-    HAL_UARTEx_ReceiveToIdle_DMA(&huart1, judge_rx_buffer[0],
-                                 UART6_MAX_RECEIVE_BUFFER_LENGTH);
+    // 取消初始化然后重新初始化
+    HAL_UARTEx_ReceiveToIdle_DMA(&huart3, judge_rx_buffer[0],
+                                 UART3_MAX_RECEIVE_BUFFER_LENGTH);
 }
 /**
  * @brief  裁判系统接收数据函数

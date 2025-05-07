@@ -6,7 +6,6 @@
 #define DART_MCU_SERVO_H
 
 #include "pwm.h"
-
 class servo {
 private:
     PWM pwm_;
@@ -32,7 +31,7 @@ private:
     inline uint32_t calCompareValue(uint16_t angle);
 };
 
-extern servo trigger_servo[2];
+extern servo trigger_servo[7];
 
 
 #endif //DART_MCU_SERVO_H

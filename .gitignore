@@ -6,6 +6,8 @@ install/
 log/
 generate_lib_microros_ws/
 
+.vscode-ctags
+
 # Cross Compile
 ubuntu_*/
 src/ros2_control_demos

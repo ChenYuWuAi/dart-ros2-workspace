@@ -6,110 +6,76 @@
 #define DART_MCU_DART_CONFIG_H
 
 #include "stdint.h"
+#include "dart_msgs/msg/dart_launcher_params.h"
+#include "dart_msgs/msg/dart_launcher_status.h"
+#include "dart_msgs/msg/green_light.h"
+
+// 比赛模式相关
+#define CONFIG_FORCE_WAIT_FOR_GAME_PROGRESS 0
+// 开舱门自瞄时间
+#define CONFIG_AUTOAIM_TIMEOUT_MS 3000
+
+// 时间相关
+#define CONFIG_SLIDE_SERVO_SLIDE_TIME 200
+#define CONFIG_LIFT_WAIT_TIME 1000
+#define CONFIG_LAUNCH_WAIT_TIME 500
+#define CONFIG_LAUNCH_WAIT_MOTOR_STABLE_TIME 500
 
 // 丝杆电机复位堵转速度
 #define CONFIG_TARGET_RESET_VELOCITY_YAWLS -100
-#define CONFIG_TARGET_RESET_VELOCITY_PITCHLS -100
 #define CONFIG_TARGET_RESET_VELOCITY_TRIGGERLS -5000
-#define CONFIG_GATE_VELOCITY_TRIGGERLS 1000
+#define CONFIG_GATE_VELOCITY_TRIGGERLS 500
 #define CONFIG_GATE_CURRENT_TRIGGERLS 2000
+#define CONFIG_GATE_CURRENT_LOAD 10
 #define CONFIG_TIMEOUT_RESET_TRIGGER 100
 
 // 该角度直接触发击发，0代表左边的，1代表右边的舵机（后视）
-#define CONFIG_TRIGGER_SERVO_TRIGGER_ANGLE_0 80
-#define CONFIG_TRIGGER_SERVO_TRIGGER_ANGLE_1 40
+#define CONFIG_TRIGGER_SERVO_TRIGGER_ANGLE_0 95
+#define CONFIG_TRIGGER_SERVO_TRIGGER_ANGLE_1 35
 // 该角度为重新装填的默认角度
 #define CONFIG_TRIGGER_SERVO_RELOAD_ANGLE_0 65
 #define CONFIG_TRIGGER_SERVO_RELOAD_ANGLE_1 0
+// 该角度为升降机在上时左右侧舵机的角度
+#define CONFIG_LOAD_SERVO_UP_ANGLE_0 200
+#define CONFIG_LOAD_SERVO_UP_ANGLE_1 70
+
+// 该角度为升降机在下时左右侧舵机的角度
+#define CONFIG_LOAD_SERVO_DOWN_ANGLE_0 67
+#define CONFIG_LOAD_SERVO_DOWN_ANGLE_1 203
+
+#define CONFIG_SLIDE_SERVO_SLIDE_ANGLE 130
+#define CONFIG_SLIDE_SERVO_CUT_ANGLE 80
 
 // 复位堵转速度和超时时间
-#define CONFIG_TARGET_RESET_VELOCITY_LOAD 1000
-#define CONFIG_GATE_VELOCITY_LOAD 100
+#define CONFIG_TARGET_RESET_VELOCITY_LOAD -800
+#define CONFIG_GATE_VELOCITY_LOAD 30
 #define CONFIG_TIMEOUT_RESET_LOAD 1000
 
 // 电机角度限制
-#define CONFIG_MOTOR_PITCH_ANGLE_MAX 8192
 #define CONFIG_MOTOR_YAW_ANGLE_MAX 8192
 #define CONFIG_MOTOR_TRIGGER_ANGLE_MAX 8192
 #define CONFIG_MOTOR_LOAD_ANGLE_MAX 8192
 
+
 // 特殊电机角度定义
-#define CONFIG_MOTOR_LOAD_ANGLE_LAUNCH 10000
-#define CONFIG_MOTOR_LOAD_ANGLE_RELOAD 1000000
+#define CONFIG_MOTOR_YAWLS_ANGLE_MIN 10000
+#define CONFIG_MOTOR_YAWLS_ANGLE_MAX 110000
+#define CONFIG_MOTOR_LOAD_ANGLE_LAUNCH 25000
+#define CONFIG_MOTOR_LOAD_ANGLE_UP 115000
+#define CONFIG_MOTOR_LOAD_ANGLE_POST_LOAD 400000
+#define CONFIG_MOTOR_LOAD_ANGLE_DOWN 1070000
 
 // 运动速度定义
-#define CONFIG_MOTOR_LOAD_OPERATION_VELOCITY 3000
+#define CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD 5000
 
+// Publisher定义
+#define LOG_BUF_LEN 50
+// 队列长度
+#define LOG_QUEUE_LEN 10
 
-// 飞镖架对外暴露控制变量
-/*
-classDiagram
-    class DartLauncherParams{
-        +int32 primary_yaw, 发射目标主偏航角
-        +int32 primary_yaw_offset, 发射目标主偏航角偏移量, 调试用
-        +int32 primary_pitch, 发射目标主俯仰角
-        +int32 primary_force, 发射扳机主位置
-        +int32 primary_force_offset, 发射扳机主位置偏移量, 调试用
-        +int32[4] auxiliary_yaw_offsets, 发射目标副偏航角偏移量, 按程序发射时使用
-        +int32[4] auxiliary_force_offsets, 发射扳机副位置偏移量, 按程序发射时使用
-        +uint64 last_param_update_time, 上次参数更新时间, 用于同步, 单位ms 高位优先
-    }
- */
-typedef struct DartLauncherParams {
-    int32_t primary_yaw;
-    int32_t primary_yaw_offset;
-    int32_t primary_pitch;
-    int32_t primary_force;
-    int32_t primary_force_offset;
-    int32_t auxiliary_yaw_offsets[4];
-    int32_t auxiliary_force_offsets[4];
-    uint64_t last_param_update_time;
-} DartLauncherParams;
-
-/*
- * 拉簧发射架状态回传数据如下：
-```mermaid
-classDiagram
-    class DartLauncherStatus{
-        +bool motor_pitch_online, 电机Pitch在线
-        +bool motor_yaw_online, 电机Yaw在线
-        +bool[2] motor_loader_online, 电机Load[0, 1]在线
-        +bool motor_trigger_online, 电机Trigger在线
-        +bool judge_online, 裁判系统在线
-        +bool rc_online, 遥控器在线
-        +uint8 dart_state, 发射架状态, 100 Boot, 101 Protect, 102 Remote, 103-106 Match Enter Wait Launch Reload, 255 Undefined
-        +uint8 dart_launch_process, 发射流程(1/4)
-        +int32 motor_pitch_angle, 电机Pitch角度
-        +int32 motor_yaw_angle, 电机Yaw总角度
-        +int32 motor_trigger_angle, 电机Trigger总角度
-        +bool servo_trigger_state, 伺服Trigger状态, 0初始, 1触发
-        +int32[2] motor_loader_current, 电机Load[0, 1]相电流
-        +int32[2] motor_loader_angle, 电机Load[0, 1]总角度
-        +double last_launch_speed, 上次发射检测速度
-        +int32 last_launch_time, 上次发射检测数据时间UNIX戳，若无时间戳/speed则为0
-    }
-```
- */
-typedef struct DartLauncherStatus {
-    bool motor_pitch_online;
-    bool motor_yaw_online;
-    bool motor_loader_online[2];
-    bool motor_trigger_online;
-    bool judge_online;
-    bool rc_online;
-    uint8_t dart_state;
-    uint8_t dart_launch_process;
-    int32_t motor_pitch_angle;
-    int32_t motor_yaw_angle;
-    int32_t motor_trigger_angle;
-    bool servo_trigger_state;
-    int32_t motor_loader_current[2];
-    int32_t motor_loader_angle[2];
-    double last_launch_speed;
-    int32_t last_launch_time;
-} DartLauncherStatus;
-
-extern DartLauncherParams dart_launcher_params;
-extern DartLauncherStatus dart_launcher_status;
+extern dart_msgs__msg__DartLauncherParams msgDartParams;
+extern dart_msgs__msg__DartLauncherParams msgDartProtocols;
+extern dart_msgs__msg__GreenLight msgGreenLight;
+extern dart_msgs__msg__DartLauncherStatus msgDartStatus;
 
 #endif //DART_MCU_DART_CONFIG_H

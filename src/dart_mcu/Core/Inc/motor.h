@@ -88,7 +88,6 @@ namespace motor {
 
     extern motor_rm MotorTriggerLS;  // 扳机丝杆电机
     extern motor_rm MotorYawLS;      // 偏航丝杆电机
-    extern motor_rm MotorPitchLS;    // 俯仰丝杆电机
     extern motor_rm MotorLoad[2];    // 装填电机
 };
 #endif //DART_MCU_MOTOR_H

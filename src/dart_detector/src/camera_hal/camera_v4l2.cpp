@@ -10,6 +10,7 @@
 #include <linux/videodev2.h>
 #include <camera_hal/camera_v4l2.hpp>
 #include <opencv2/opencv.hpp>
+#include <iostream>
 
 namespace CameraHAL
 {
@@ -144,7 +145,7 @@ namespace CameraHAL
     {
         if (!isOpened)
         {
-            std::cerr << "Camera is not opened!" << std::endl;
+            std::cerr << "Camera is not opened" << std::endl;
             return false;
         }
 

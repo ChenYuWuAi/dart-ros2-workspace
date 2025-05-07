@@ -72,6 +72,8 @@ public:
 
     void info();
 
+    bool discovery();
+
 private:
     ICameraPtr _cameraSptr;
 

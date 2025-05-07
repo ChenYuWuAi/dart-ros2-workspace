@@ -44,7 +44,7 @@ void MX_CAN1_Init(void);
 void MX_CAN2_Init(void);
 
 /* USER CODE BEGIN Prototypes */
-
+void reboot_can(CAN_HandleTypeDef * hcan);
 /* USER CODE END Prototypes */
 
 #ifdef __cplusplus

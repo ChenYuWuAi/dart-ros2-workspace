@@ -7,7 +7,6 @@
 namespace motor {
     motor_rm MotorTriggerLS; // 扳机丝杆电机
     motor_rm MotorYawLS; // 偏航丝杆电机
-    motor_rm MotorPitchLS; // 俯仰丝杆电机
     motor_rm MotorLoad[2]; // 装填电机
 
     void update_can_array(uint8_t *aData, uint8_t id, int16_t output) {
@@ -81,7 +80,7 @@ namespace motor {
      */
     int16_t motor_rm::updateCurrent() {
         // Check Disconnect
-        if (xTaskGetTickCount() - last_update_time_ > 1000) {
+        if (xTaskGetTickCount() - last_update_time_ > 5000) {
             motor_state_ = (DISCONNECTED);
         } else if (motor_state_ == DISCONNECTED) {
             motor_state_ = (IDLE);

@@ -58,6 +58,7 @@
 /* External variables --------------------------------------------------------*/
 extern SMBUS_HandleTypeDef hsmbus1;
 extern TIM_HandleTypeDef htim2;
+extern TIM_HandleTypeDef htim21;
 /* USER CODE BEGIN EV */
 
 /* USER CODE END EV */
@@ -157,6 +158,20 @@ void TIM2_IRQHandler(void)
 }
 
 /**
+  * @brief This function handles TIM21 global interrupt.
+  */
+void TIM21_IRQHandler(void)
+{
+  /* USER CODE BEGIN TIM21_IRQn 0 */
+
+  /* USER CODE END TIM21_IRQn 0 */
+  HAL_TIM_IRQHandler(&htim21);
+  /* USER CODE BEGIN TIM21_IRQn 1 */
+
+  /* USER CODE END TIM21_IRQn 1 */
+}
+
+/**
   * @brief This function handles I2C1 event global interrupt / I2C1 wake-up interrupt through EXTI line 23.
   */
 void I2C1_IRQHandler(void)
@@ -173,6 +188,7 @@ void I2C1_IRQHandler(void)
     HAL_SMBUS_EV_IRQHandler(&hsmbus1);
   }
   /* USER CODE BEGIN I2C1_IRQn 1 */
+
   /* USER CODE END I2C1_IRQn 1 */
 }
 
