@@ -74,6 +74,12 @@ classDiagram
         +CV::Mat read()
         +bool write(std::string, std::string)
     }
+    class CameraDriverRPI{
+        +open(std::unordered_map<string, string>)
+        +close()
+        +CV::Mat read()
+        +bool write(std::string, std::string)
+    }
     class CameraDriverDH{
         +open(std::unordered_map<string, string>)
         +close()
@@ -88,6 +94,7 @@ classDiagram
     }
     CameraDriver <|-- CameraDriverDH
     CameraDriver <|-- CameraDriverMIPI
+    CameraDriver <|-- CameraDriverRPI
     
 ```
 
@@ -248,6 +255,7 @@ classDiagram
         +int32 primary_force_offset, 发射扳机主位置偏移量, 调试用
         +int32[4] auxiliary_yaw_offsets, 发射目标副偏航角偏移量, 按程序发射时使用
         +int32[4] auxiliary_force_offsets, 发射扳机副位置偏移量, 按程序发射时使用
+        +int16 sequence_offset, 从第几发开始发射，调试用，若该值大于等于4，则取余
         +uint64 last_param_update_time, 上次参数更新时间, 用于同步, 单位ms 高位优先
     }
 ```
@@ -261,6 +269,7 @@ classDiagram
         +bool[2] motor_loader_online, 电机Load[0, 1]在线
         +bool motor_trigger_online, 电机Trigger在线
         +bool judge_online, 裁判系统在线
+        +bool in_game, 是否在赛场上
         +bool rc_online, 遥控器在线
         +uint8 dart_state, 发射架状态, 100 Boot, 101 Protect, 102 Remote, 103-106 Match Enter Wait Launch Reload, 255 Undefined
         +uint8 dart_launch_process, 发射流程(1/4)
@@ -280,14 +289,14 @@ classDiagram
 
 | 数组索引 | 参数名称                              | 说明                                                         |
 |----------|---------------------------------------|--------------------------------------------------------------|
-| 0        | `primary_yaw`                    | 发射目标主偏航角                                             |
-| 1        | `primary_yaw_offset`             | 发射目标主偏航角偏移量（调试用）                              |
-| 2        | `primary_force`                        | 发射扳机主位置                                               |
-| 3        | `primary_force_offset`                 | 发射扳机主位置偏移量（调试用）                                |
-| 4 ~ 7    | `auxiliary_yaw_offsets[0..3]`| 发射目标副偏航角偏移量（程序发射时使用，共 4 个数值）           |
-| 8 ~ 11   | `auxiliary_yaw_offsets[0..3]`     | 发射扳机副位置偏移量（程序发射时使用，共 4 个数值）             |
-| 12       | `last_launch_speed`                   | 上次发射检测速度，按一定精度转换成 int32：`int32_value = (int32)(last_launch_speed * 1000)`   |
-| 13       | `last_launch_time`                    | 上次发射检测数据时间（UNIX 时间戳，单位：秒）                         |
+| 0        |`primary_yaw`                     | 发射目标主偏航角                                             |
+| 1        |`primary_pitch`                   | 发射目标主俯仰角(很快会被移除)                                             |
+| 2        |`primary_force`                   | 发射扳机主位置                                             |
+| 3-6        |`auxiliary_yaw_offsets`          | 发射目标副偏航角偏移量                                       |
+| 7-10        |`auxiliary_force_offsets`        | 发射扳机副位置偏移量                                       |
+| 11        |`sequence_offset`                | 从第几发开始发射，调试用                                     |
+| 12-13        |`last_param_update_time`         | 上次参数更新时间, 用于同步, 单位ms 高位优先                   |
+| 14        |`dart_state`                      | 发射架状态, 100 Boot, 101 Protect, 102 Remote, 103-106 Match Enter Wait Launch Reload, 255 Undefined |
 
 与此同时，由于裁判系统串口连接到STM32上，需要将裁判系统的数据包转发到ROS2系统中，以便日志记录和其他功能的实现。
 
@@ -315,6 +324,22 @@ classDiagram
 | 4       | `stage_remain_time`                | 当前阶段剩余时间                                             |
 | 5       | `judge_online`                     | 裁判系统在线状态                                             |
 
+### 通信拓扑
+1. 生命周期管理、日志及看门狗节点
+    - 管理其他节点的生命周期
+    - 在节点出现看门狗问题的时候复位系统，将其他节点调为配置模式，将目标节点复位
+    - 通过裁判系统通告和镖架状态通告记录日志
+2. 界面、配置及节点：
+    - 管理整个系统的Config，并处理打击Protocol的新建、存储、修改和选择
+    - 显示系统状态、当前硬件Yaw, Pitch, Trigger角度，提供快速更改参数的途径
+    - 显示一部分裁判系统消息
+    - 系统设置
+    - 提供协议选择、当前协议二维码获取、当前协议速览
+    - 显示系统通告
+    - 需要时显示相机画面
+3. 自瞄相机节点
+4. 参数相机节点
+
 框图如下：
 
 ```mermaid
@@ -337,9 +362,13 @@ flowchart LR
 ```
 
 ## 比赛需求功能
+### 打击协议
 1. 协议指的是一种一次性更新的参数集合，包含发射各轴角度、各槽位飞镖ID等。
 2. 每次进入比赛状态时同步打击协议到MCU上，此后除非通过编辑器重新保存了协议，或者视觉自瞄识别目标后发生了自瞄Yaw调整，否则不再更新。
 3. 比赛状态下MCU没有改变协议的权限，协议只能由上位机编辑器或者自瞄模块修改。
 4. 比赛状态下自瞄模块产生的Yaw调整会被MCU接收并应用到发射参数中，但不会更新原有协议，而是在协议中增加一个Yaw偏移量，MCU会将其应用到发射参数中。该Yaw偏移量根据协议中的“是否自动保留键值参数”决定是否保留到协议中。远期计划根据比赛中的打击目标：固定目标则保留到协议中，移动目标则不保留。产生的一切变化都需要记录在日志中。
 5. 遥控模式下，MCU会上报遥控器事件造成的参数变化，上位机存储到当前硬件状态参数中。除非勾选了“是否自动生成新协议”，否则不会更新原有协议或者产生任何新协议。若勾选了“是否自动生成新协议”，则会在当前协议的基础上生成一个新的协议，协议名称为"tmp_*当前时间戳*"，并将当前硬件状态参数存储到新协议中。这种临时协议会在当前启动中被默认选择。然而，这种临时协议不会被下次开机加载，但是可以下次开机前手动加载。
 6. 在协议编辑器中，可以选择更新协议参数。协议参数可以在单独项或全选项中手动选择“引用”——可以引用已有协议，也可以从当前硬件参数中加载，也可以手动调整。
+
+### 快速参数调整
+使用Android手机APP编辑发射参数后生成json格式的二维码协议文件，由镖架后摄扫描后
