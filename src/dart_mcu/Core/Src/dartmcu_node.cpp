@@ -34,6 +34,8 @@
 
 #include <queue>
 
+#include <dart_launcher_default_value.hpp>
+
 enum states {
     WAITING_AGENT,
     AGENT_AVAILABLE,
@@ -60,58 +62,6 @@ rclc_executor_t executor;
 std_msgs__msg__Int64 msgInt64;
 std_msgs__msg__String msgString;
 
-dart_msgs__msg__GreenLight msgGreenLight;
-dart_msgs__msg__DartLauncherParams msgDartParams = {
-        .primary_yaw = 40000,
-        .primary_yaw_offset = 0,
-        .primary_force = 6000000,
-        .primary_force_offset = 0,
-        .auxiliary_yaw_offsets = {0, 0, 0, 0},
-        .auxiliary_force_offsets = {0, 0, 0, 0},
-        .dart_launch_process_offset_begin = 0,
-        .dart_launch_process_offset_end = 3,
-        .auto_aim_enabled = false,
-        .target_auto_aim_x_axis = 640,
-        .last_param_update_time = 0
-};
-
-dart_msgs__msg__DartLauncherParams msgDartProtocols = {
-        .primary_yaw = 40000,
-        .primary_yaw_offset = 0,
-        .primary_force = 6000000,
-        .primary_force_offset = 0,
-        .auxiliary_yaw_offsets = {0, 0, 0, 0},
-        .auxiliary_force_offsets = {0, 0, 0, 0},
-        .dart_launch_process_offset_begin = 0,
-        .dart_launch_process_offset_end = 3,
-        .auto_aim_enabled = false,
-        .target_auto_aim_x_axis = 640,
-        .last_param_update_time = 0
-};
-
-dart_msgs__msg__DartLauncherStatus msgDartStatus = {
-        .motor_yaw_online = false,
-        .motor_loader_online = {false, false},
-        .motor_trigger_online = false,
-        .judge_online = false,
-        .rc_online = false,
-        .dart_state = 0,
-        .dart_launch_process = 0,
-        .motor_yaw_angle = 0,
-        .motor_trigger_angle = 0,
-        .motor_loader_current = {0, 0},
-        .motor_loader_angle = {0, 0},
-        .last_launch_speed = 0.0f,
-        .last_launch_time = 0,
-        .dart_launch_opening_status = 0,
-        .game_progress = 0,
-        .dart_remaining_time = 0,
-        .latest_launch_cmd_time = 0,
-        .stage_remain_time = 0,
-        .params = msgDartParams,
-        .protocols = msgDartProtocols,
-};
-
 char msgString_buf[LOG_BUF_LEN];
 
 velocity_meter_result_t velocity_meter_result;
@@ -119,6 +69,13 @@ velocity_meter_result_t velocity_meter_result;
 TaskHandle_t velocity_meter_result_task_handle;
 
 TickType_t last_greenlight_update_time = 0;
+
+dart_msgs__msg__GreenLight msgGreenLight;
+dart_msgs__msg__DartLauncherParams msgDartParams;
+
+dart_msgs__msg__DartLauncherParams msgDartProtocols;
+
+dart_msgs__msg__DartLauncherStatus msgDartStatus = defaultDartStatus;
 
 extern "C"
 {
@@ -135,6 +92,11 @@ void publish_velocity_meter_result(void *arg) {
 }
 
 void microros_node_task(void) {
+    defaultDartParams(msgDartParams);
+    defaultDartProtocols(msgDartProtocols);
+    msgDartStatus.params = msgDartParams;
+    msgDartStatus.protocols = msgDartProtocols;
+
     soundEffectManager.begin(&htim12, &htim6, TIM_CHANNEL_1, HAL_RCC_GetPCLK2Freq());
     LED::led_flow.begin();
     trigger_servo[0].begin(&htim4, TIM_CHANNEL_1, HAL_RCC_GetPCLK2Freq(), 500, 2500, 0, 180, 10000, 100,
@@ -485,7 +447,7 @@ void subscription_greenlight_callback(const void *msgin) {
 }
 
 // --- 日志接口：中断中不可调用 ---
-void dart_mcu_log(char *msg) {
+void dart_mcu_log(const char *msg) {
     // 如果queue长于3 丢弃
     if (xLogQueue.size() > 10) {
         return;

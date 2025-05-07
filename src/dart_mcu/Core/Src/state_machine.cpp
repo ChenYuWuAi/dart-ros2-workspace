@@ -357,6 +357,11 @@ do{                        \
             return E_ResetActionReturnState::Operating; // 未完成
         } else if (running_flag_ == 2)
             return E_ResetActionReturnState::Finished; // 完成
+
+        else {
+            running_flag_ = 0;
+            return E_ResetActionReturnState::Failed; // 失败
+        }
     }
 
     /**
@@ -522,7 +527,8 @@ do{                        \
                     choose_sound_effect(song_index);
                 } else if (RC_Data.Switch_Left == RC_SW_DOWN) {
                     song_index =
-                            (song_index - 1 + BuzzerSound::BuzzerSoundMax) % BuzzerSound::BuzzerSoundMax; // 逆时针拨动，上一首
+                            (song_index - 1 + BuzzerSound::BuzzerSoundMax) %
+                            BuzzerSound::BuzzerSoundMax; // 逆时针拨动，上一首
                     // 播放选定的歌曲
                     soundEffectManager.clearSoundEffects();
                     choose_sound_effect(song_index);

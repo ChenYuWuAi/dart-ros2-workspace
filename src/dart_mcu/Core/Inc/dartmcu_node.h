@@ -18,7 +18,6 @@
 #include <std_msgs/msg/string.h>
 #include <buzzer.h>
 #include "buzzer_examples.h"
-#include "dart_launcher_param.h"
 
 #include "FreeRTOS.h"
 #include "queue.h"
@@ -62,7 +61,7 @@ void subscription_greenlight_callback(const void *msgin);
 void choose_sound_effect(int index);
 
 // --- 日志函数原型 ---
-void dart_mcu_log(char *msg);
+void dart_mcu_log(const char *msg);
 
 extern rcl_allocator_t allocator;
 extern rcl_publisher_t publisher_logger;
