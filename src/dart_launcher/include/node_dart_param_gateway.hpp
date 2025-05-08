@@ -6,6 +6,7 @@
 #define NODE_DART_PARAM_GATEWAY_HPP
 
 #include <thread>
+#include <chrono>
 
 // ROS2 Lifecycle Node
 #include <rclcpp/rclcpp.hpp>
@@ -59,21 +60,25 @@ private:
     rclcpp::Node::SharedPtr node_;
 
     // Publisher
-    rclcpp::Publisher<dart_msgs::msg::DartLauncherParams>::SharedPtr dart_param_pub_;
+    rclcpp::Publisher<dart_msgs::msg::DartLauncherParams>::SharedPtr dart_params_pub_,
+        dart_protocols_pub_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr dart_buzzer_cmd_pub_;
+
     // Subscriber
     // for string json params
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr dart_qr_param_sub_;
     // for launcher param subscription
     rclcpp::Subscription<dart_msgs::msg::DartLauncherParams>::SharedPtr dart_param_sub_;
+    // for status subscription
+    rclcpp::Subscription<dart_msgs::msg::DartLauncherStatus>::SharedPtr dart_status_sub_;
     // for greenlight detector
     rclcpp::Subscription<dart_msgs::msg::GreenLight>::SharedPtr greenlight_sub_;
 
-    // Dart_param
-    dart_msgs::msg::DartLauncherParams current_dart_param_, target_dart_param_;
-    // Dart_protocols
-    dart_msgs::msg::DartLauncherParams current_dart_protocols_, target_dart_protocols_;
-    // Dart_status
+    // Dart_param (用于保存目标参数和上传的参数)
+    dart_msgs::msg::DartLauncherParams target_dart_param_;
+    dart_msgs::msg::DartLauncherParams target_dart_protocols_;
+
+    // Dart_status (包含实际从MCU接收到的params和protocols)
     dart_msgs::msg::DartLauncherStatus dart_status_;
 
     std::thread daemon_thread_;

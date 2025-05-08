@@ -13,3 +13,8 @@ ubuntu_*/
 src/ros2_control_demos
 src/plugin_lib_demo
 .vscode/settings.json
+
+# Python venv
+venv/
+
+test_bag/

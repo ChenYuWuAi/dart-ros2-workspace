@@ -2,15 +2,15 @@
 #define QRCODE_DETECTOR_H
 
 #include <opencv2/opencv.hpp>
-#include <zbar.h>
+#include <opencv2/wechat_qrcode.hpp>
 #include <vector>
 #include <string>
 
-class QRCodeDetectorZB
+class QRCodeDetector
 {
 public:
-    QRCodeDetectorZB();
-    ~QRCodeDetectorZB();
+    QRCodeDetector();
+    ~QRCodeDetector();
 
     /**
      * @brief 检测输入图像中的二维码
@@ -26,8 +26,8 @@ public:
     void setBinaryThreshold(double threshold);
 
 private:
-    zbar::ImageScanner scanner;
-    double binary_threshold = 200.0; // 二值化阈值
+    cv::Ptr<cv::wechat_qrcode::WeChatQRCode> wechat_detector; // WeChat QRCode检测器
+    double binary_threshold = 200.0;                      // 二值化阈值
 };
 
 #endif // QRCODE_DETECTOR_H
