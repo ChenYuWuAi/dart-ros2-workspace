@@ -27,7 +27,7 @@ class NodeDartLauncherDetector : public rclcpp_lifecycle::LifecycleNode
 private:
     std::shared_ptr<CameraDriver> camera_lccv_;
     std::shared_ptr<CameraDriver> camera_dh_;
-    QRCodeDetectorZB qr_detector_;
+    QRCodeDetector qr_detector_;
     std::shared_ptr<TopArmorDetect> greenlight_detector_;
 
     rclcpp_lifecycle::LifecyclePublisher<dart_msgs::msg::GreenLight>::SharedPtr greenlight_publisher_;

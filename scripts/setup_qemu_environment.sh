@@ -103,9 +103,9 @@ if [ ! -d "$OPENCV_DIR/install" ]; then
       -G Ninja -D CMAKE_TOOLCHAIN_FILE=../platforms/linux/aarch64-gnu.toolchain.cmake \
       -D CMAKE_INSTALL_PREFIX=../install \
       -D BUILD_opencv_objdetect=ON \
-      -D BUILD_opencv_calib3d=OFF \
+      -D BUILD_opencv_calib3d=ON \
       -D BUILD_opencv_dnn=OFF \
-      -D BUILD_opencv_features2d=OFF \
+      -D BUILD_opencv_features2d=ON \
       -D BUILD_opencv_flann=OFF \
       -D BUILD_opencv_gapi=OFF \
       -D BUILD_opencv_highgui=OFF \
@@ -126,7 +126,8 @@ if [ ! -d "$OPENCV_DIR/install" ]; then
       -D BUILD_TESTS=OFF \
       -D INSTALL_C_EXAMPLES=OFF \
       -D INSTALL_PYTHON_EXAMPLES=OFF \
-      -D OPENCV_ENABLE_NONFREE=OFF
+      -D OPENCV_ENABLE_NONFREE=OFF \
+      -D OPENCV_EXTRA_MODULES_PATH=/home/devcontainers/opencv_contrib/modules/wechat_qrcode
     
 
     if [ $? -ne 0 ]; then

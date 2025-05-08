@@ -19,6 +19,8 @@ find_package(dart_msgs REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(OpenCV REQUIRED)
+find_package(OpenCV REQUIRED COMPONENTS wechat_qrcode)
+find_package(OpenVINO REQUIRED)
 
 # 环境变量 DART_DEVICE_TYPE 为 dart_launcher 时：
 if(DEFINED ENV{DART_DEVICE_TYPE})
@@ -29,6 +31,11 @@ if(DEFINED ENV{DART_DEVICE_TYPE})
         elseif($ENV{DART_DEVICE_TYPE} STREQUAL "guided_dart")
                 message(STATUS "guided_dart")
                 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGUIDED_DART")
+        elseif($ENV{DART_DEVICE_TYPE} STREQUAL "dart_launcher_wsl2")
+                message(STATUS "dart_launcher_wsl2")
+                set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DDART_LAUNCHER_WSL2")
+        else()
+                message(FATAL_ERROR "Unknown DART_DEVICE_TYPE")
         endif()
 endif()
 
@@ -43,7 +50,7 @@ if($ENV{DART_DEVICE_TYPE} STREQUAL "dart_launcher")
                 camera_driver/LCCV/src/libcamera_app_options.cpp camera_driver/LCCV/src/libcamera_app.cpp)
 
         FILE(GLOB SOURCES_DETECTOR src/detector/greenlight_detect.cpp
-                src/detector/zbar_detect.cpp)
+                src/detector/qrcode_detect.cpp)
 
         add_executable(node_launcher_detector src/node_launcher_detector.cpp camera_driver/DHCameraDriver/DHVideoCapture.cpp
                 ${SOURCES_HAL_CAMERA}
@@ -92,7 +99,7 @@ if($ENV{DART_DEVICE_TYPE} STREQUAL "dart_launcher")
                         NodeMapData_gcc485_v3_0
                         ImageConvert
                 )
-                target_link_libraries(node_launcher_detector ${OpenCV_LIBS} MVSDK ${MVSDK_LIBS} pthread zbar ${LIBCAMERA_LINK_LIBRARIES})
+                target_link_libraries(node_launcher_detector ${OpenCV_LIBS} MVSDK ${MVSDK_LIBS} pthread qrcode ${LIBCAMERA_LINK_LIBRARIES})
         elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
                 message(STATUS "x86_64")
                 target_include_directories(
@@ -117,7 +124,12 @@ if($ENV{DART_DEVICE_TYPE} STREQUAL "dart_launcher")
                         XmlParser_gcc421_v3_0
                         NodeMapData_gcc421_v3_0
                 )
-                target_link_libraries(node_launcher_detector ${OpenCV_LIBS} MVSDK ${MVSDK_LIBS} pthread zbar ${LIBCAMERA_LINK_LIBRARIES})
+                target_link_libraries(node_launcher_detector ${OpenCV_LIBS} MVSDK ${MVSDK_LIBS} pthread qrcode ${LIBCAMERA_LINK_LIBRARIES})
+        endif()
+
+        # 链接WeChat QRCode库
+        if(OpenCV_wechat_qrcode_FOUND)
+            target_link_libraries(node_launcher_detector ${OpenCV_LIBS})
         endif()
 
         # ===== 制导镖视觉检测 OpenCV相关 开始 =====
@@ -143,6 +155,8 @@ elseif($ENV{DART_DEVICE_TYPE} STREQUAL "guided_dart")
 
         # ===== 视觉检测 OpenCV相关 结束 =====
 
+elseif($ENV{DART_DEVICE_TYPE} STREQUAL "dart_launcher_wsl2")
+        # TODO 编译假测试节点
 endif()
 # ===== 相机节点 根据不同设备类型编译不同的相机驱动 结束 =====
 
@@ -186,6 +200,26 @@ elseif($ENV{DART_DEVICE_TYPE} STREQUAL "guided_dart")
                 DESTINATION lib/${PROJECT_NAME})
 endif()
 
+if(BUILD_DART_ROS2_WORKSPACE_TESTS)
+        message(STATUS "BUILD_DART_ROS2_WORKSPACE_TEST in dart_detector")
+        # 添加 QRCodeDetector 的测试
+        add_executable(test_qrcode_detector test/test_qrcode_detector.cpp src/detector/qrcode_detect.cpp)
+        
+        target_include_directories(test_qrcode_detector PRIVATE include ${OpenCV_INCLUDE_DIRS})
+        target_link_libraries(test_qrcode_detector ${OpenCV_LIBS})
+
+        add_executable(test_greenlight_detector test/test_greenlight_detector.cpp src/detector/greenlight_detect.cpp)
+        target_include_directories(test_greenlight_detector PRIVATE include ${OpenCV_INCLUDE_DIRS})
+        target_link_libraries(test_greenlight_detector ${OpenCV_LIBS})
+
+        # 添加 Neural Network 检测器的测试
+        add_executable(test_greenlight_nn_detector test/test_greenlight_nn_detector.cpp src/detector/greenlight_nn_detect.cpp)
+        target_include_directories(test_greenlight_nn_detector PRIVATE include ${OpenCV_INCLUDE_DIRS} ${OpenVINO_INCLUDE_DIRS})
+        target_link_libraries(test_greenlight_nn_detector ${OpenCV_LIBS} openvino::runtime)
+
+        install(TARGETS test_qrcode_detector test_greenlight_detector test_greenlight_nn_detector
+                DESTINATION lib/${PROJECT_NAME})
+endif()
 
 if(BUILD_TESTING)
         find_package(ament_lint_auto REQUIRED)
@@ -199,6 +233,7 @@ if(BUILD_TESTING)
         # added to all source files
         set(ament_cmake_cpplint_FOUND TRUE)
         ament_lint_auto_find_test_dependencies()
+
 endif()
 
 install(DIRECTORY

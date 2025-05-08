@@ -1,15 +1,22 @@
 #include "detector/greenlight_detect.h"
+#include <thread> // for hardware_concurrency
 
 /**
  * @brief 构造函数，从paramFile读取参数
  */
 TopArmorDetect::TopArmorDetect(const std::string &paramFile)
 {
+    // 启用 OpenCV 多线程优化
+    cv::setUseOptimized(true);
+    cv::setNumThreads(std::thread::hardware_concurrency());
     loadParameters(paramFile);
 }
 
 TopArmorDetect::TopArmorDetect(int HMIN, int HMAX, int SMIN, int SMAX, int VMIN, int VMAX, double minDIST, double rmin, double rmax, double PARAM1, double PARAM2) : HMIN(HMIN), HMAX(HMAX), SMIN(SMIN), SMAX(SMAX), VMIN(VMIN), VMAX(VMAX), minDIST(minDIST), RMIN(rmin), RMAX(rmax), PARAM1(PARAM1), PARAM2(PARAM2)
 {
+    // 启用 OpenCV 多线程优化
+    cv::setUseOptimized(true);
+    cv::setNumThreads(std::thread::hardware_concurrency());
 }
 
 /**
@@ -127,6 +134,8 @@ void TopArmorDetect::preprocess(cv::Mat &frame, cv::Mat &result)
  */
 bool TopArmorDetect::detect(cv::Mat &frame)
 {
+    if(frame.empty())
+        return false;
     _circles.clear();
     _rawImg = frame.clone();
     cv::Mat result;

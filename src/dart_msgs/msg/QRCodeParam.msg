@@ -1,2 +1,0 @@
-std_msgs/Header header
-string qr_code_data
