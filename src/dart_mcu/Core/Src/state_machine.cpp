@@ -929,7 +929,12 @@ do{                        \
                     }
                 } else {
                     if (!fsm.custom<Dart_FSM>()->ActionRemote_launch_complete_) {
-                        base_velocity = -CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
+                        if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
+                            CONFIG_MOTOR_LOAD_ANGLE_UP) {
+                            base_velocity = -CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD / 5;
+                        } else {
+                            base_velocity = -CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
+                        }
                         if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
                             CONFIG_MOTOR_LOAD_ANGLE_LAUNCH |
                             motor_controller::MotorLoadController[1].current_angle_with_rounds_ <=
@@ -938,6 +943,15 @@ do{                        \
                             fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ = xTaskGetTickCount();
                             base_velocity = 0;
                             setTriggerServotoTrigger();
+
+                            motor_controller::MotorLoadController[0].set_state(
+                                    motor_controller::E_PID_Velocity_Angle_Controller_State::OPEN_LOOP);
+                            motor_controller::MotorLoadController[0].target_openloop_ = CONFIG_TARGET_RESET_VELOCITY_LOAD;
+
+                            motor_controller::MotorLoadController[1].set_state(
+                                    motor_controller::E_PID_Velocity_Angle_Controller_State::OPEN_LOOP);
+
+                            motor_controller::MotorLoadController[1].target_openloop_ = CONFIG_TARGET_RESET_VELOCITY_LOAD;
                         }
                     } else {
                         if (xTaskGetTickCount() - fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ >
@@ -947,6 +961,11 @@ do{                        \
                             if ((RC_Data.ch2 <= 1400 && RC_Data.ch0 >= 400)) {
                                 fsm.custom<Dart_FSM>()->ActionRemote_launch_complete_ = false;
                                 fsm.custom<Dart_FSM>()->launch_operating_ = false;
+                                // 切闭环
+                                motor_controller::MotorLoadController[0].set_state(
+                                        motor_controller::E_PID_Velocity_Angle_Controller_State::VELOCITY_CONTROL);
+                                motor_controller::MotorLoadController[1].set_state(
+                                        motor_controller::E_PID_Velocity_Angle_Controller_State::VELOCITY_CONTROL);
                             }
                         }
                     }
