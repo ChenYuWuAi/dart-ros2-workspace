@@ -6,6 +6,7 @@
 // TODO: 引入非线性PID Error, 加快自瞄收敛速度
 // TODO: 比赛内开启飞镖闸门就预位准备发射，最速化发射
 // TODO: 比赛模式移植遥控模式的发射缓动
+// TODO: 调整新的Down角度
 
 #include "state_machine.h"
 #include "openfsm.h"
