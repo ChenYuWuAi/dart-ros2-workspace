@@ -2,6 +2,11 @@
 // Created by cheny on 24-9-18.
 //
 
+// TODO: 准备阶段进行自瞄，随后将自瞄结果从offset存到primary，在launch时测算移动靶偏移量
+// TODO: 引入非线性PID Error, 加快自瞄收敛速度
+// TODO: 比赛内开启飞镖闸门就预位准备发射，最速化发射
+// TODO: 比赛模式移植遥控模式的发射缓动
+
 #include "state_machine.h"
 #include "openfsm.h"
 #include "motor.h"
@@ -489,7 +494,6 @@ do{                        \
             soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_autopilot_disconnect));
             // 关闭激光器
             disableLaser();
-            //            disableTriggerServo();
             meter::velocity_meter.disable();
             msgDartStatus.dart_state = dart_fsm.openFSM_.focusEState();
             last_sw_left = RC_Data.Switch_Left; // 保存上一次拨轮位置
@@ -1256,15 +1260,11 @@ do{                        \
 
                 case 3:
                     // 向上运动
-                    // TODO: 发射调试测试动作
-//                    setTriggerServotoTrigger();
                     base_velocity = -CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
                     if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
                         CONFIG_MOTOR_LOAD_ANGLE_LAUNCH ||
                         motor_controller::MotorLoadController[1].current_angle_with_rounds_ <= -
                                 CONFIG_MOTOR_LOAD_ANGLE_LAUNCH) {
-                        // TODO: 删掉这一测试动作
-//                        setTriggerServotoReload();
                         fsm.custom<Dart_FSM>()->ActionMatch_Launch_State = 4;
                         fsm.custom<Dart_FSM>()->ActionGeneral_Timer0_ = xTaskGetTickCount();
                     }
