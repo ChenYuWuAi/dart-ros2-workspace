@@ -45,7 +45,7 @@ public:
             {
                 this->current_params_ = *msg;
                 RCLCPP_INFO(this->get_logger(), "Received new params and updated.");
-                RCLCPP_DEBUG(this->get_logger(), "Msg Timestamp: %d", msg->last_param_update_time);
+                RCLCPP_INFO(this->get_logger(), "Msg Timestamp: %u", current_params_.last_param_update_time);
             });
         sub_protocols_ = this->create_subscription<dart_msgs::msg::DartLauncherParams>(
             "/dart_launcher_mcu/cmd_protocols", qos_reliable,
@@ -53,7 +53,7 @@ public:
             {
                 this->current_protocols_ = *msg;
                 RCLCPP_INFO(this->get_logger(), "Received new protocols and updated.");
-                RCLCPP_DEBUG(this->get_logger(), "Msg Timestamp: %d", msg->last_param_update_time);
+                RCLCPP_INFO(this->get_logger(), "Msg Timestamp: %u", current_protocols_.last_param_update_time);
             });
 
         // Subscriber for buzzer sound effect commands

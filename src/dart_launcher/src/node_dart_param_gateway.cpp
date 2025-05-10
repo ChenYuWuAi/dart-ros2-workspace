@@ -5,6 +5,13 @@
 
 using json = nlohmann::json;
 
+// 获取当前时间戳（ms）
+static uint64_t get_ros_time_ms(const rclcpp::Clock &clock)
+{
+    auto now = clock.now();
+    return static_cast<uint64_t>(now.seconds() * 1000.0);
+}
+
 NodeDartParamGateway::NodeDartParamGateway(rclcpp::NodeOptions options)
     : rclcpp_lifecycle::LifecycleNode("node_dart_param_gateway", options),
       daemon_running_(false)
@@ -138,21 +145,45 @@ void NodeDartParamGateway::start_daemon()
         daemon_running_ = true;
         RCLCPP_INFO(get_logger(), "Daemon thread started.");
 
-        enum class SyncState { IDLE, CHECK_MCU_RESTART, CHECK_MISMATCH, RESYNC, SAVE_TO_FILE };
+        enum class SyncState
+        {
+            IDLE,
+            CHECK_MCU_RESTART,
+            CHECK_MISMATCH,
+            RESYNC_PARAMS,
+            RESYNC_PROTOCOLS,
+            RESYNC,
+            SAVE_TO_FILE
+        };
         SyncState current_state = SyncState::IDLE;
 
-        auto last_save_time = std::chrono::steady_clock::now();
-        auto last_resync_time = std::chrono::steady_clock::now();
+        auto last_save_time = this->now();
+        auto last_resync_time = this->now();
         std::string database_path;
         this->get_parameter("param_database_path", database_path);
 
         while (rclcpp::ok() && daemon_running_)
         {
-            auto now_time = std::chrono::steady_clock::now();
+            auto now_time = this->now();
+
+            // 判断MCU节点是否在线
+            if(now_time - last_status_time_ > std::chrono::seconds(5))
+            {
+                mcu_online_ = false;
+                RCLCPP_WARN(get_logger(), "MCU node is offline.");
+            }
+            else
+            {
+                mcu_online_ = true;
+            }
+
 
             switch (current_state)
             {
             case SyncState::IDLE:
+                // 判断之前，屏蔽某一些变量
+                dart_status_.params.primary_yaw_offset = 0;
+                dart_status_.protocols.primary_yaw_offset = 0;
                 if ((dart_status_.protocols.last_param_update_time == 0 || dart_status_.params.last_param_update_time == 0) && dart_status_.header.stamp.sec != 0)
                 {
                     current_state = SyncState::CHECK_MCU_RESTART;
@@ -161,8 +192,9 @@ void NodeDartParamGateway::start_daemon()
                 else if (dart_status_.params != target_dart_param_ || dart_status_.protocols != target_dart_protocols_)
                 {
                     current_state = SyncState::CHECK_MISMATCH;
+                    last_resync_time = now_time;
                 }
-                else if (std::chrono::duration_cast<std::chrono::seconds>(now_time - last_save_time).count() >= 30)
+                else if ((now_time - last_save_time).seconds() >= 30)
                 {
                     current_state = SyncState::SAVE_TO_FILE;
                 }
@@ -172,45 +204,80 @@ void NodeDartParamGateway::start_daemon()
                 RCLCPP_WARN(get_logger(), "Detected MCU restart, resynchronizing parameters and protocols...");
                 dart_params_pub_->publish(target_dart_param_);
                 dart_protocols_pub_->publish(target_dart_protocols_);
-                
-                // 在timeout时间内等待MCU参数更新
-                if(now_time - last_resync_time < std::chrono::seconds(5) && (dart_status_.params != target_dart_param_ || dart_status_.protocols != target_dart_protocols_))
+                last_resync_time = now_time;
+                current_state = SyncState::RESYNC;
+                break;
+            case SyncState::CHECK_MISMATCH:
+            {
+                auto param_to_check = dart_status_.params;
+                param_to_check.primary_yaw_offset = 0;
+                if (param_to_check != target_dart_param_)
                 {
-                    RCLCPP_DEBUG(get_logger(), "Waiting for MCU parameters to update...");
+                    if (param_to_check.last_param_update_time <= target_dart_param_.last_param_update_time)
+                    {
+                        RCLCPP_INFO(get_logger(), "Detected parameter mismatch, resynchronizing params...");
+                        dart_params_pub_->publish(target_dart_param_);
+                    }
+                    else
+                    {
+                        RCLCPP_INFO(get_logger(), "Detected parameter mismatch, updating target_dart_param_...");
+                        target_dart_param_ = dart_status_.params;
+                    }
+                }
+            }
+            
+            {
+                auto protocols_to_check = dart_status_.protocols;
+                protocols_to_check.primary_yaw_offset = 0;
+                if (protocols_to_check != target_dart_protocols_)
+                {
+                    if (protocols_to_check.last_param_update_time <= target_dart_protocols_.last_param_update_time)
+                    {
+                        RCLCPP_INFO(get_logger(), "Detected protocols mismatch, resynchronizing protocols...");
+                        dart_protocols_pub_->publish(target_dart_protocols_);
+                    }
+                    else
+                    {
+                        RCLCPP_INFO(get_logger(), "Detected protocols mismatch, updating target_dart_protocols_...");
+                        target_dart_protocols_ = dart_status_.protocols;
+                    }
+                }
+            }
+            last_resync_time = now_time;
+            current_state = SyncState::RESYNC_PARAMS;
+            break;
+        case SyncState::RESYNC: 
+        case SyncState::RESYNC_PARAMS:
+        case SyncState::RESYNC_PROTOCOLS:
+            // 判断之前，屏蔽某一些变量
+            dart_status_.params.primary_yaw_offset = 0;
+            // 在timeout时间内等待MCU参数更新，此时间内可能MCU会自动更新参数，所以检查last_param_update_time是否为当前值
+            if (dart_status_.params != target_dart_param_ && (current_state == SyncState::RESYNC || current_state == SyncState::RESYNC_PARAMS)) 
+            {
+                if (now_time - last_resync_time < std::chrono::seconds(1))
+                {
+                    RCLCPP_INFO(get_logger(), "Waiting for MCU parameters to update...");
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 }
                 else
                 {
                     // 超时未更新，进入IDLE重新发布参数
                     current_state = SyncState::IDLE;
-                    RCLCPP_WARN(get_logger(), "MCU parameters not updated within timeout, resynchronizing...");
+                    RCLCPP_WARN(get_logger(), "MCU parameters not updated within timeout...");
                 }
-                break;
-            case SyncState::CHECK_MISMATCH:
-                if (dart_status_.params != target_dart_param_)
-                {
-                    RCLCPP_INFO(get_logger(), "Detected parameter mismatch, resynchronizing params...");
-                    dart_params_pub_->publish(target_dart_param_);
-                }
-
-                if (dart_status_.protocols != target_dart_protocols_)
-                {
-                    RCLCPP_INFO(get_logger(), "Detected protocols mismatch, resynchronizing protocols...");
-                    dart_params_pub_->publish(target_dart_protocols_);
-                }
-
-                last_resync_time = now_time;
-                current_state = SyncState::IDLE;
-                break;
-
-            case SyncState::SAVE_TO_FILE:
-                save_params_to_file(database_path);
-                last_save_time = now_time;
-                current_state = SyncState::IDLE;
-                break;
             }
-
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            else
+            {
+                RCLCPP_INFO(get_logger(), "MCU parameters updated successfully.");
+            }
+            break;
+        case SyncState::SAVE_TO_FILE:
+            save_params_to_file(database_path);
+            last_save_time = now_time;
+            current_state = SyncState::IDLE;
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
 
         RCLCPP_INFO(get_logger(), "Daemon thread stopped."); });
@@ -263,13 +330,6 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
         return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
     }
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
-}
-
-// 获取当前时间戳（ms）
-static uint64_t get_ros_time_ms(const rclcpp::Clock &clock)
-{
-    auto now = clock.now();
-    return static_cast<uint64_t>(now.seconds() * 1000.0);
 }
 
 void NodeDartParamGateway::process_qr_code(const std_msgs::msg::String::SharedPtr msg)
@@ -332,27 +392,13 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
     dart_buzzer_cmd_pub_ = this->create_publisher<std_msgs::msg::Int32>(
         "/dart_launcher_mcu/cmd_sound_effect", rclcpp::QoS(10).durability_volatile().reliable());
 
-    dart_param_sub_ = this->create_subscription<dart_msgs::msg::DartLauncherParams>(
-        "/dart_launcher_mcu/params", rclcpp::QoS(10).durability_volatile().best_effort(),
-        [this](const dart_msgs::msg::DartLauncherParams::SharedPtr msg)
-        {
-            dart_status_.params = *msg;
-        });
-
     // 添加status订阅
     dart_status_sub_ = this->create_subscription<dart_msgs::msg::DartLauncherStatus>(
         "/dart_launcher_mcu/status", rclcpp::QoS(10).durability_volatile().best_effort(),
         [this](const dart_msgs::msg::DartLauncherStatus::SharedPtr msg)
         {
-            // 判断下位机参数是否比本地新
-            if (msg->params.last_param_update_time > target_dart_param_.last_param_update_time)
-            {
-                target_dart_param_ = msg->params;
-                RCLCPP_INFO(get_logger(), "MCU参数更新，自动同步target_dart_param_，last_param_update_time=%lu", msg->params.last_param_update_time);
-                std::string database_path;
-                if (this->get_parameter("param_database_path", database_path))
-                    save_params_to_file(database_path);
-            }
+            last_status_time_ = this->now();
+            mcu_online_ = true;
             dart_status_ = *msg;
         });
 
@@ -383,7 +429,6 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
     dart_params_pub_.reset();
     dart_protocols_pub_.reset();
     dart_buzzer_cmd_pub_.reset();
-    dart_param_sub_.reset();
     dart_status_sub_.reset();
     dart_qr_param_sub_.reset();
 
@@ -409,8 +454,6 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
 
         if (dart_buzzer_cmd_pub_)
             dart_buzzer_cmd_pub_.reset();
-    if (dart_param_sub_)
-        dart_param_sub_.reset();
     if (dart_status_sub_)
         dart_status_sub_.reset();
     if (dart_qr_param_sub_)
