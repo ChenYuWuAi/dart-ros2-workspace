@@ -3,9 +3,6 @@
 //
 
 // TODO: 准备阶段进行自瞄，随后将自瞄结果从offset存到primary，在launch时测算移动靶偏移量
-// TODO: 引入非线性PID Error, 加快自瞄收敛速度
-// TODO: 比赛内开启飞镖闸门就预位准备发射，最速化发射
-// TODO: 比赛模式移植遥控模式的发射缓动
 // TODO: 调整新的Down角度
 
 #include "state_machine.h"
@@ -560,10 +557,10 @@ do{                        \
             if (msgDartParams.auto_aim_enabled) {
                 if (msgGreenLight.is_detected
                     && xTaskGetTickCount() - last_greenlight_update_time < 400) {
+                    // TODO: 引入非线性PID Error, 加快自瞄收敛速度
                     if (abs(msgGreenLight.location.x - msgDartParams.target_auto_aim_x_axis) > 5)
                         msgDartParams.primary_yaw_offset = motor_controller::AutoAimController.update(
-                                msgDartParams.target_auto_aim_x_axis -
-                                msgGreenLight.location.x);
+                            msgDartParams.target_auto_aim_x_axis - msgGreenLight.location.x);
                     no_autoaim_count = 0;
                     static char buf[30];
                     snprintf(buf, sizeof(buf), "Autoaim updated to %d", msgDartParams.primary_yaw_offset);
@@ -1098,13 +1095,19 @@ do{                        \
             uint16_t latest_launch_cmd_time = ext_dart_client_cmd.latest_launch_cmd_time;
 
             // 等待发射信号
+            // TODO: 比赛内开启飞镖闸门就预位准备发射，最速化发射
             bool launch_grant_ = false;
+            bool pre_launch_grant = false;
 
             // ====== 自动信号域 ======
 
             // 信号一：裁判系统飞镖闸门从“正在开启”达到“完全开启”信号，同时比赛正常进行中
             launch_grant_ |= (last_dart_gate_opening_status_ == E_Gate_State::OPERATING &&
                               dart_launch_opening_status == E_Gate_State::OPENED &&
+                              game_progress == 4);
+
+            pre_launch_grant |= (last_dart_gate_opening_status_ == E_Gate_State::CLOSED &&
+                              dart_launch_opening_status == E_Gate_State::OPERATING &&
                               game_progress == 4);
 
             // 信号二：飞镖发射剩余时间变化，时间落在15s内，而且比赛进行中
@@ -1136,6 +1139,12 @@ do{                        \
                     // 比赛中手动发射允许二连发
                 else
                     fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = true;
+            }
+
+            // 内八模拟闸门从关闭切换到开启中的信号
+            if (((RC_Data.ch0 < 1400 && RC_Data.ch2 > 400) && (!match_flag_)) ||
+               ((RC_Data.ch0 < 1400 && RC_Data.ch2 > 400) && game_progress == 4 && (match_flag_))){
+                pre_launch_grant = true;
             }
 
             // 门控 比赛时间不足\准备阶段\自检时\自瞄进行中 拒绝发射
@@ -1261,13 +1270,28 @@ do{                        \
 
                 case 3:
                     // 向上运动
-                    base_velocity = -CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
+                    // TODO: 比赛模式移植遥控模式的发射缓动
+                    if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
+                        CONFIG_MOTOR_LOAD_ANGLE_UP){
+                        base_velocity = -CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD / 5;
+                    }else{
+                        base_velocity = -CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
+                    }
                     if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
                         CONFIG_MOTOR_LOAD_ANGLE_LAUNCH ||
                         motor_controller::MotorLoadController[1].current_angle_with_rounds_ <= -
                                 CONFIG_MOTOR_LOAD_ANGLE_LAUNCH) {
                         fsm.custom<Dart_FSM>()->ActionMatch_Launch_State = 4;
                         fsm.custom<Dart_FSM>()->ActionGeneral_Timer0_ = xTaskGetTickCount();
+
+                        motor_controller::MotorLoadController[0].set_state(
+                                    motor_controller::E_PID_Velocity_Angle_Controller_State::OPEN_LOOP);
+                        motor_controller::MotorLoadController[0].target_openloop_ = CONFIG_TARGET_RESET_VELOCITY_LOAD;
+
+                        motor_controller::MotorLoadController[1].set_state(
+                                motor_controller::E_PID_Velocity_Angle_Controller_State::OPEN_LOOP);
+
+                        motor_controller::MotorLoadController[1].target_openloop_ = CONFIG_TARGET_RESET_VELOCITY_LOAD;
                     }
                     break;
 
@@ -1278,6 +1302,11 @@ do{                        \
                     if (xTaskGetTickCount() - fsm.custom<Dart_FSM>()->ActionGeneral_Timer0_ >
                         pdMS_TO_TICKS(CONFIG_LAUNCH_WAIT_TIME)) {
                         setTriggerServotoReload();
+                        // 切闭环
+                        motor_controller::MotorLoadController[0].set_state(
+                                motor_controller::E_PID_Velocity_Angle_Controller_State::VELOCITY_CONTROL);
+                        motor_controller::MotorLoadController[1].set_state(
+                                motor_controller::E_PID_Velocity_Angle_Controller_State::VELOCITY_CONTROL);
                         fsm.nextAction();
                     }
                     break;
