@@ -11,13 +11,6 @@ static note_t buzzer_warn[] = {
         {659, 82},
 };
 
-static note_t buzzer_winxp_logout[] = {
-        {1661, 272},
-        {1244, 272},
-        {830,  272},
-        {932,  818},
-};
-
 static note_t buzzer_haru[] = {
         {587,  574},
         {987,  561},
@@ -4901,7 +4894,7 @@ typedef enum {
     BuzzerPlugIn,
     BuzzerRemove,
     BuzzerError,
-    BuzzerProtect,
+    BuzzerWinxpLogout,
     BuzzerChunriying,
     BuzzerIfICouldBeAConstelletion,
     BuzzerGuitarLonelinessBlueEarth,
@@ -4913,7 +4906,6 @@ typedef enum {
     BuzzerInternetOverdose,
     BuzzerInternetAngel,
     BuzzerIfICouldBeAConstelletionPlus,
-    BuzzerWinxpLogout,
     BuzzerWin10PlugIn,
     BuzzerWin10Remove,
     BuzzerSoundMax
