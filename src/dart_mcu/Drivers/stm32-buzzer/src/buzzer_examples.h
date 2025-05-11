@@ -4876,6 +4876,19 @@ static note_t buzzer_internet_angel[] = {
         {440, 399},
 };
 
+static note_t buzzer_win10_plug_in[] = {
+        {523, 272},
+        {440, 136},
+        {349, 136},
+        {659, 272},
+};
+
+static note_t buzzer_win10_remove[] = {
+        {440, 136},
+        {349, 102},
+        {329, 136},
+};
+
 typedef enum {
     BuzzerAutopilotDisconnect,
     BuzzerLaunch,
@@ -4901,6 +4914,8 @@ typedef enum {
     BuzzerInternetAngel,
     BuzzerIfICouldBeAConstelletionPlus,
     BuzzerWinxpLogout,
+    BuzzerWin10PlugIn,
+    BuzzerWin10Remove,
     BuzzerSoundMax
 } BuzzerSound;
 

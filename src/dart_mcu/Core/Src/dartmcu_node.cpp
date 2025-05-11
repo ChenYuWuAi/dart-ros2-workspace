@@ -412,6 +412,15 @@ void choose_sound_effect(int index) {
         case BuzzerSound::BuzzerIfICouldBeAConstelletionPlus:
             soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_if_i_could_be_a_constelletion_plus));
             break;
+        case BuzzerSound::BuzzerWinxpLogout:
+            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_winxp_logout));
+            break;
+        case BuzzerSound::BuzzerWin10PlugIn:
+            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_win10_plug_in));
+            break;
+        case BuzzerSound::BuzzerWin10Remove:
+            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_win10_remove));
+            break;
         default:
             soundEffectManager.stopCurrentSoundEffect();
             break;
