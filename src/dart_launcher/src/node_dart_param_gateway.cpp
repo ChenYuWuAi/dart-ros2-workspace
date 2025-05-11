@@ -432,7 +432,7 @@ void NodeDartParamGateway::process_qr_code(const std_msgs::msg::String::SharedPt
 
             // 发布扬声器信息
             auto buzzer_msg = std_msgs::msg::Int32();
-            buzzer_msg.data = BuzzerHaru;
+            buzzer_msg.data = BuzzerSound::BuzzerStartup;
             dart_buzzer_cmd_pub_->publish(buzzer_msg);
         }
         else if (command_type == "DartProtocols")
@@ -570,6 +570,20 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
         RCLCPP_INFO(get_logger(), "Daemon thread joined during shutdown.");
     }
 
+    // 清理资源
+    // 确保所有资源被释放
+    if (dart_params_pub_)
+        dart_params_pub_.reset();
+    if (dart_protocols_pub_)
+
+        if (dart_buzzer_cmd_pub_)
+            dart_buzzer_cmd_pub_.reset();
+    if (dart_status_sub_)
+        dart_status_sub_.reset();
+    if (dart_qr_param_sub_)
+        dart_qr_param_sub_.reset();
+    
+    RCLCPP_INFO(get_logger(), "NodeDartParamGateway resources cleaned up.");
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
 

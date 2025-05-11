@@ -1,4 +1,4 @@
-/dart_launcher_detector:
+/node_dart_launcher_detector:
   ros__parameters:
     lccv:
       enable: true

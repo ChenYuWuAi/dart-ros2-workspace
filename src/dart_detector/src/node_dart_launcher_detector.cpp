@@ -331,19 +331,6 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
         }
     }
 
-    // 设置QR码检测器参数
-    if (this->has_parameter("detect.qr_detect.binThreshold"))
-    {
-        int binThreshold = this->get_parameter("detect.qr_detect.binThreshold").as_int();
-        RCLCPP_INFO(this->get_logger(), "QR Code detector binary threshold set to: %d", binThreshold);
-        qr_detector_.setBinaryThreshold(binThreshold);
-    }
-    else
-    {
-        RCLCPP_WARN(this->get_logger(), "QR code detector binary threshold not set, using default value 39.");
-        qr_detector_.setBinaryThreshold(39);
-    }
-
     if (!greenlight_detector_)
     {
         RCLCPP_ERROR(this->get_logger(), "Failed to initialize greenlight detector.");
@@ -477,6 +464,26 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
     greenlight_image_publisher_.reset();
     greenlight_detector_.reset();
     RCLCPP_INFO(this->get_logger(), "Resources successfully cleaned up.");
+    return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
+}
+
+rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDartLauncherDetector::on_shutdown(
+    const rclcpp_lifecycle::State &pre_state)
+{
+    RCLCPP_INFO(this->get_logger(), "Shutting down node...");
+    running_ = false;
+    if (lccv_thread_)
+    {
+        lccv_thread_->join();
+        lccv_thread_.reset();
+    }
+    if (dh_thread_)
+    {
+        dh_thread_->join();
+        dh_thread_.reset();
+    }
+    RCLCPP_INFO(this->get_logger(), "Node shutdown complete.");
+
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
 

@@ -52,23 +52,23 @@ if($ENV{DART_DEVICE_TYPE} STREQUAL "dart_launcher")
         FILE(GLOB SOURCES_DETECTOR src/detector/greenlight_detect.cpp
                 src/detector/qrcode_detect.cpp)
 
-        add_executable(node_launcher_detector src/node_launcher_detector.cpp camera_driver/DHCameraDriver/DHVideoCapture.cpp
+        add_executable(node_dart_launcher_detector src/node_dart_launcher_detector.cpp camera_driver/DHCameraDriver/DHVideoCapture.cpp
                 ${SOURCES_HAL_CAMERA}
                 ${SOURCES_DETECTOR})
 
         target_include_directories(
-                node_launcher_detector
+                node_dart_launcher_detector
                 PRIVATE
                 ${CMAKE_CURRENT_SOURCE_DIR}/include/
                 ${OpenCV_INCLUDE_DIRS})
 
-        ament_target_dependencies(node_launcher_detector rclcpp sensor_msgs
+        ament_target_dependencies(node_dart_launcher_detector rclcpp sensor_msgs
                 cv_bridge rclcpp_lifecycle dart_msgs std_msgs geometry_msgs)
 
         # LCCV
         pkg_check_modules(LIBCAMERA REQUIRED libcamera)
         target_include_directories(
-                node_launcher_detector
+                node_dart_launcher_detector
                 PRIVATE
                 ${CMAKE_CURRENT_SOURCE_DIR}/camera_driver/LCCV/include
                 ${LIBCAMERA_INCLUDE_DIRS}
@@ -78,14 +78,14 @@ if($ENV{DART_DEVICE_TYPE} STREQUAL "dart_launcher")
         if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
                 message(STATUS "aarch64")
                 target_include_directories(
-                        node_launcher_detector
+                        node_dart_launcher_detector
                         PRIVATE
                         ${CMAKE_CURRENT_SOURCE_DIR}/camera_driver/DHCameraDriver/DHCamera_arm64 # here
                         ${CMAKE_CURRENT_SOURCE_DIR}/camera_driver/
                         ${OpenCV_INCLUDE_DIRS})
 
                 target_link_directories(
-                        node_launcher_detector PRIVATE
+                        node_dart_launcher_detector PRIVATE
                         ${CMAKE_CURRENT_SOURCE_DIR}/camera_driver/DHCameraDriver/DHCamera_arm64/lib
                 )
                 set(MVSDK_LIBS
@@ -99,18 +99,18 @@ if($ENV{DART_DEVICE_TYPE} STREQUAL "dart_launcher")
                         NodeMapData_gcc485_v3_0
                         ImageConvert
                 )
-                target_link_libraries(node_launcher_detector ${OpenCV_LIBS} MVSDK ${MVSDK_LIBS} pthread qrcode ${LIBCAMERA_LINK_LIBRARIES})
+                target_link_libraries(node_dart_launcher_detector ${OpenCV_LIBS} MVSDK ${MVSDK_LIBS} pthread ${LIBCAMERA_LINK_LIBRARIES})
         elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
                 message(STATUS "x86_64")
                 target_include_directories(
-                        node_launcher_detector
+                        node_dart_launcher_detector
                         PRIVATE
                         ${CMAKE_CURRENT_SOURCE_DIR}/camera_driver/DHCameraDriver/DHCamera # here
                         ${CMAKE_CURRENT_SOURCE_DIR}/camera_driver/
                         ${OpenCV_INCLUDE_DIRS})
 
                 target_link_directories(
-                        node_launcher_detector PRIVATE
+                        node_dart_launcher_detector PRIVATE
                         ${CMAKE_CURRENT_SOURCE_DIR}/camera_driver/DHCameraDriver/DHCamera/lib
                         ${CMAKE_CURRENT_SOURCE_DIR}/camera_driver/DHCameraDriver/DHCamera
                         ${CMAKE_CURRENT_SOURCE_DIR}/camera_driver/DHCameraDriver/DHCamera/lib/GenICam/bin/Linux64_x64
@@ -124,12 +124,12 @@ if($ENV{DART_DEVICE_TYPE} STREQUAL "dart_launcher")
                         XmlParser_gcc421_v3_0
                         NodeMapData_gcc421_v3_0
                 )
-                target_link_libraries(node_launcher_detector ${OpenCV_LIBS} MVSDK ${MVSDK_LIBS} pthread qrcode ${LIBCAMERA_LINK_LIBRARIES})
+                target_link_libraries(node_dart_launcher_detector ${OpenCV_LIBS} MVSDK ${MVSDK_LIBS} pthread ${LIBCAMERA_LINK_LIBRARIES})
         endif()
 
         # 链接WeChat QRCode库
         if(OpenCV_wechat_qrcode_FOUND)
-            target_link_libraries(node_launcher_detector ${OpenCV_LIBS})
+            target_link_libraries(node_dart_launcher_detector ${OpenCV_LIBS})
         endif()
 
         # ===== 制导镖视觉检测 OpenCV相关 开始 =====
@@ -170,7 +170,7 @@ endif()
 
 # 根据设备类型决定install内容
 if($ENV{DART_DEVICE_TYPE} STREQUAL "dart_launcher")
-        install(TARGETS node_launcher_detector # parameter_node
+        install(TARGETS node_dart_launcher_detector # parameter_node
                 DESTINATION lib/${PROJECT_NAME})
         if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
                 install(DIRECTORY

@@ -4,7 +4,6 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <cv_bridge/cv_bridge.hpp>
-#include <opencv2/opencv.hpp>
 #include <thread>
 #include <string>
 #include <unordered_map>
@@ -12,7 +11,7 @@
 #include <rclcpp_lifecycle/lifecycle_publisher.hpp>
 #include "rcl_interfaces/msg/set_parameters_result.hpp"
 #include "camera_hal/camera_driver.hpp"
-#include <detector/zbar_detect.h>
+#include <detector/qrcode_detect.h>
 #include <detector/greenlight_detect.h>
 #include <std_msgs/msg/string.hpp>
 #include <dart_msgs/msg/green_light.hpp>
@@ -27,7 +26,7 @@ class NodeDartLauncherDetector : public rclcpp_lifecycle::LifecycleNode
 private:
     std::shared_ptr<CameraDriver> camera_lccv_;
     std::shared_ptr<CameraDriver> camera_dh_;
-    QRCodeDetector qr_detector_;
+    QRCodeDetectorWechat qr_detector_;
     std::shared_ptr<TopArmorDetect> greenlight_detector_;
 
     rclcpp_lifecycle::LifecyclePublisher<dart_msgs::msg::GreenLight>::SharedPtr greenlight_publisher_;
@@ -62,6 +61,9 @@ public:
         const rclcpp_lifecycle::State &pre_state) override;
 
     rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn on_cleanup(
+        const rclcpp_lifecycle::State &pre_state) override;
+
+    rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn on_shutdown(
         const rclcpp_lifecycle::State &pre_state) override;
 };
 

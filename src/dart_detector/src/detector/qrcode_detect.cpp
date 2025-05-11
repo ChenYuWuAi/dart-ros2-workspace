@@ -1,7 +1,7 @@
 #include "detector/qrcode_detect.h"
 #include <opencv2/wechat_qrcode.hpp>
 
-QRCodeDetector::QRCodeDetector()
+QRCodeDetectorWechat::QRCodeDetectorWechat()
 {
     // // 初始化zbar扫描器，仅启用二维码识别
     // scanner.set_config(zbar::ZBAR_QRCODE, zbar::ZBAR_CFG_ENABLE, 1);
@@ -19,14 +19,14 @@ QRCodeDetector::QRCodeDetector()
     }
 }
 
-QRCodeDetector::~QRCodeDetector() {}
+QRCodeDetectorWechat::~QRCodeDetectorWechat() {}
 
-void QRCodeDetector::setBinaryThreshold(double threshold)
+void QRCodeDetectorWechat::setBinaryThreshold(double threshold)
 {
     binary_threshold = threshold;
 }
 
-std::vector<std::string> QRCodeDetector::detect(cv::Mat &inputImage)
+std::vector<std::string> QRCodeDetectorWechat::detect(cv::Mat &inputImage)
 {
     std::vector<std::string> results;
 

@@ -6,11 +6,11 @@
 #include <vector>
 #include <string>
 
-class QRCodeDetector
+class QRCodeDetectorWechat
 {
 public:
-    QRCodeDetector();
-    ~QRCodeDetector();
+    QRCodeDetectorWechat();
+    ~QRCodeDetectorWechat();
 
     /**
      * @brief 检测输入图像中的二维码

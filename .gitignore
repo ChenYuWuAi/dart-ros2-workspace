@@ -18,3 +18,5 @@ src/plugin_lib_demo
 venv/
 
 test_bag/
+
+launch_log/

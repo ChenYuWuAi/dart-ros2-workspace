@@ -10,13 +10,13 @@ def generate_launch_description():
         'src',
         'dart_detector',
         'config',
-        'node_launcher_detector.yaml'
+        'node_dart_launcher_detector.yaml'
     )
 
     # 启动 lifecycle 节点
     lifecycle_node = Node(
         package='dart_detector',
-        executable='node_launcher_detector',
+        executable='node_dart_launcher_detector',
         output='screen',
         parameters=[config_file]
     )
@@ -25,7 +25,7 @@ def generate_launch_description():
     configure_transition = TimerAction(
         period=2.0,  # 延时 2 秒后执行
         actions=[ExecuteProcess(
-            cmd=['ros2', 'lifecycle', 'set', '/dart_launcher_detector', 'configure'],
+            cmd=['ros2', 'lifecycle', 'set', '/node_dart_launcher_detector', 'configure'],
             output='screen'
         )]
     )
@@ -34,7 +34,7 @@ def generate_launch_description():
     activate_transition = TimerAction(
         period=5.0,  # 延时 5 秒后执行
         actions=[ExecuteProcess(
-            cmd=['ros2', 'lifecycle', 'set', '/dart_launcher_detector', 'activate'],
+            cmd=['ros2', 'lifecycle', 'set', '/node_dart_launcher_detector', 'activate'],
             output='screen'
         )]
     )

@@ -12,7 +12,7 @@ public:
     }
 
 private:
-    QRCodeDetector detector;
+    QRCodeDetectorWechat detector;
 
     void testDetectEmptyImage() {
         std::cout << "Running test: DetectEmptyImage" << std::endl;
