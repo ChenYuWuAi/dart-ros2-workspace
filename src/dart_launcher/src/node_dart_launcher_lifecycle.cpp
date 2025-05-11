@@ -106,7 +106,7 @@ private:
         RCLCPP_INFO(get_logger(), "All nodes shutdown transitions triggered.");
 
         // Play shutdown sound
-        buzzer_sound_effect(BuzzerSound::BuzzerError);
+        buzzer_sound_effect(BuzzerSound::BuzzerWinxpLogout);
 
         // Shutdown the node
         RCLCPP_INFO(get_logger(), "Shutting down lifecycle manager...");
