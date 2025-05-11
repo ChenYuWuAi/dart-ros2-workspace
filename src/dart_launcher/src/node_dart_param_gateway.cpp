@@ -450,6 +450,8 @@ void NodeDartParamGateway::process_qr_code(const std_msgs::msg::String::SharedPt
 
             // 发布扬声器信息
             auto buzzer_msg = std_msgs::msg::Int32();
+            buzzer_msg.data = BuzzerSoundMax;
+            dart_buzzer_cmd_pub_->publish(buzzer_msg);
             buzzer_msg.data = BuzzerHaru;
             dart_buzzer_cmd_pub_->publish(buzzer_msg);
         }
