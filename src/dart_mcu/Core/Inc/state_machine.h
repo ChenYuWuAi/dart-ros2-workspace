@@ -77,6 +77,7 @@ namespace state_machine {
         uint8_t ActionRemoteandReload_Reload_State = 0;
         uint8_t ActionRemoteandReload_Slidedown_State = 0;
         uint8_t ActionRemoteandReload_Reset_State = 0;
+        uint8_t ActionMatch_Wait_last_game_progress = 0;
         bool ActionReload_Slidedown_Judge = false;
         // 该值当且仅当发射信号确认，并且在比赛模式中的时候生效。为真则会跳过一次发射确认过程。
         bool ActionMatch_Wait_Continuous_Fire = false;

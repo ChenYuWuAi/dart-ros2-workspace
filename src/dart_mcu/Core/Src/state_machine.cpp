@@ -549,31 +549,31 @@ do{                        \
         }
     };
 
-    bool updateAutoAim(dart_msgs__msg__DartLauncherParams &msgDartParams) {
+    bool updateAutoAim(dart_msgs__msg__DartLauncherParams &msgDartParams_) {
         static uint8_t no_autoaim_count = 0;
         static TickType_t last_autoaim_update_tick = 0;
         if (xTaskGetTickCount() - last_autoaim_update_tick > 100) { // 10 fps
             last_autoaim_update_tick = xTaskGetTickCount();
-            if (msgDartParams.auto_aim_enabled) {
+            if (msgDartParams_.auto_aim_enabled) {
                 if (msgGreenLight.is_detected
                     && xTaskGetTickCount() - last_greenlight_update_time < 400) {
                     // TODO: 引入非线性PID Error, 加快自瞄收敛速度
-                    if (abs(msgGreenLight.location.x - msgDartParams.target_auto_aim_x_axis) > 5)
+                    if (abs(msgGreenLight.location.x - msgDartParams_.target_auto_aim_x_axis) > 5)
                         msgDartStatus.primary_yaw_offset = motor_controller::AutoAimController.update(
-                            msgDartParams.target_auto_aim_x_axis - msgGreenLight.location.x);
+                                msgDartParams_.target_auto_aim_x_axis - msgGreenLight.location.x);
                     no_autoaim_count = 0;
                     static char buf[30];
                     snprintf(buf, sizeof(buf), "Autoaim updated to %d", msgDartStatus.primary_yaw_offset);
                     dart_mcu_log(buf);
                     motor_controller::MotorYawLSController.target_angle_with_rounds_ =
-                            msgDartParams.primary_yaw + msgDartStatus.primary_yaw_offset;
+                            msgDartParams_.primary_yaw + msgDartStatus.primary_yaw_offset;
 
                     return true;
                 } else {
                     no_autoaim_count++;
                     if (no_autoaim_count > 5) {
                         motor_controller::MotorYawLSController.target_angle_with_rounds_ =
-                                msgDartParams.primary_yaw;
+                                msgDartParams_.primary_yaw;
                         msgDartStatus.primary_yaw_offset = 0;
                         motor_controller::AutoAimController.reset();
                     }
@@ -653,6 +653,8 @@ do{                        \
                                                                 motor::MotorYawLS.current_angle_;
                             msgDartParams.primary_yaw = motor_controller::MotorYawLSController.
                                     target_angle_with_rounds_;
+
+                            msgDartParams.last_param_update_time = rmw_uros_epoch_millis();
                         }
                         // 从msgDartParams里获取
                         // 判断是否更新自瞄
@@ -690,6 +692,7 @@ do{                        \
                                     motor::MotorTriggerLS.current_angle_;
                             msgDartParams.primary_force = motor_controller::MotorTriggerLSController.
                                     target_angle_with_rounds_;
+                            msgDartParams.last_param_update_time = rmw_uros_epoch_millis();
                         }
                         // 从msgDartParams里获取新值
                         motor_controller::MotorTriggerLSController.
@@ -994,6 +997,7 @@ do{                        \
 
             fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = false;
             msgDartStatus.dart_state = dart_fsm.openFSM_.focusEState() + 0;
+            msgDartStatus.primary_yaw_offset = 0;
         }
 
         void update(OpenFSM &fsm) const override {
@@ -1060,6 +1064,7 @@ do{                        \
             motor_controller::MotorLoadSyncController.reset();
 
             msgDartStatus.dart_state = dart_fsm.openFSM_.focusEState() + 1;
+            fsm.custom<Dart_FSM>()->ActionMatch_Wait_last_game_progress = ext_game_status.game_progress;
         }
 
         void update(OpenFSM &fsm) const override {
@@ -1094,6 +1099,15 @@ do{                        \
             uint8_t dart_remaining_time = ext_dart_info.dart_remaining_time;
             uint16_t latest_launch_cmd_time = ext_dart_client_cmd.latest_launch_cmd_time;
 
+            // 准备阶段结束的时候，将自瞄值offsets更新到primary内
+            if (fsm.custom<Dart_FSM>()->ActionMatch_Wait_last_game_progress == 2 &&
+                game_progress == 3) {
+                msgDartProtocols.primary_yaw = msgDartProtocols.primary_yaw + msgDartStatus.primary_yaw_offset;
+                // 重置自瞄控制器
+                motor_controller::AutoAimController.reset();
+                msgDartProtocols.last_param_update_time = rmw_uros_epoch_millis();
+            }
+
             // 等待发射信号
             // TODO: 比赛内开启飞镖闸门就预位准备发射，最速化发射
             bool launch_grant_ = false;
@@ -1107,8 +1121,8 @@ do{                        \
                               game_progress == 4);
 
             pre_launch_grant |= (last_dart_gate_opening_status_ == E_Gate_State::CLOSED &&
-                              dart_launch_opening_status == E_Gate_State::OPERATING &&
-                              game_progress == 4);
+                                 dart_launch_opening_status == E_Gate_State::OPERATING &&
+                                 game_progress == 4);
 
             // 信号二：飞镖发射剩余时间变化，时间落在15s内，而且比赛进行中
             launch_grant_ |= (dart_remaining_time > 0 &&
@@ -1143,7 +1157,7 @@ do{                        \
 
             // 内八模拟闸门从关闭切换到开启中的信号
             if (((RC_Data.ch0 < 1400 && RC_Data.ch2 > 400) && (!match_flag_)) ||
-               ((RC_Data.ch0 < 1400 && RC_Data.ch2 > 400) && game_progress == 4 && (match_flag_))){
+                ((RC_Data.ch0 < 1400 && RC_Data.ch2 > 400) && game_progress == 4 && (match_flag_))) {
                 pre_launch_grant = true;
             }
 
@@ -1171,6 +1185,10 @@ do{                        \
                 return;
             }
 #endif
+
+            if (pre_launch_grant) {
+                // TODO: 将双装填电机都拉到最下面
+            }
 
             if (launch_grant_) {
                 dart_mcu_log("Launch granted!");
@@ -1272,9 +1290,9 @@ do{                        \
                     // 向上运动
                     // TODO: 比赛模式移植遥控模式的发射缓动
                     if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
-                        CONFIG_MOTOR_LOAD_ANGLE_UP){
+                        CONFIG_MOTOR_LOAD_ANGLE_UP) {
                         base_velocity = -CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD / 5;
-                    }else{
+                    } else {
                         base_velocity = -CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
                     }
                     if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
@@ -1285,7 +1303,7 @@ do{                        \
                         fsm.custom<Dart_FSM>()->ActionGeneral_Timer0_ = xTaskGetTickCount();
 
                         motor_controller::MotorLoadController[0].set_state(
-                                    motor_controller::E_PID_Velocity_Angle_Controller_State::OPEN_LOOP);
+                                motor_controller::E_PID_Velocity_Angle_Controller_State::OPEN_LOOP);
                         motor_controller::MotorLoadController[0].target_openloop_ = CONFIG_TARGET_RESET_VELOCITY_LOAD;
 
                         motor_controller::MotorLoadController[1].set_state(
@@ -1324,8 +1342,8 @@ do{                        \
         void exit(OpenFSM &fsm) const override {
             msgDartStatus.dart_launch_process++;
             if (msgDartStatus.dart_launch_process >
-                msgDartParams.dart_launch_process_offset_end) {
-                msgDartStatus.dart_launch_process = msgDartParams.dart_launch_process_offset_begin;
+                msgDartProtocols.dart_launch_process_offset_end) {
+                msgDartStatus.dart_launch_process = msgDartProtocols.dart_launch_process_offset_begin;
             }
         }
     };
@@ -1342,10 +1360,10 @@ do{                        \
             // 判断是否需要等待下滑
             // 从方便和装填一致性的角度来说，想飞的镖少的时候，直接按照滑台-装填-导轨1-导轨2的队列填充。
             fsm.custom<Dart_FSM>()->ActionReload_Slidedown_Judge = false;
-            if (msgDartParams.dart_launch_process_offset_end -
-                msgDartParams.dart_launch_process_offset_begin >= 2)
+            if (msgDartProtocols.dart_launch_process_offset_end -
+                msgDartProtocols.dart_launch_process_offset_begin >= 2)
                 if (msgDartStatus.dart_launch_process -
-                    msgDartParams.dart_launch_process_offset_begin >= 2)
+                    msgDartProtocols.dart_launch_process_offset_begin >= 2)
                     fsm.custom<Dart_FSM>()->ActionReload_Slidedown_Judge = true;
 
 
