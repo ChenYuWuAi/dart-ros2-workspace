@@ -12,11 +12,11 @@ else
 fi
 
 ######## Check existing library ########
-if [ -f "$BASE_PATH/libmicroros/libmicroros.a" ]; then
-    echo "micro-ROS library found. Skipping..."
-    echo "Delete $MICROROS_LIBRARY_FOLDER/libmicroros/ for rebuild."
-    exit 0
-fi
+#if [ -f "$BASE_PATH/libmicroros/libmicroros.a" ]; then
+#    echo "micro-ROS library found. Skipping..."
+#    echo "Delete $MICROROS_LIBRARY_FOLDER/libmicroros/ for rebuild."
+#    exit 0
+#fi
 ######## Trying to retrieve CFLAGS ########
 export RET_CFLAGS=$(find /project -type f -name *.mk -exec cat {} \; | python3 $BASE_PATH/library_generation/extract_flags.py)
 RET_CODE=$?

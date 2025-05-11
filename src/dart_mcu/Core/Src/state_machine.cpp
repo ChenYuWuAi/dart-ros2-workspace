@@ -559,14 +559,14 @@ do{                        \
                     && xTaskGetTickCount() - last_greenlight_update_time < 400) {
                     // TODO: 引入非线性PID Error, 加快自瞄收敛速度
                     if (abs(msgGreenLight.location.x - msgDartParams.target_auto_aim_x_axis) > 5)
-                        msgDartParams.primary_yaw_offset = motor_controller::AutoAimController.update(
+                        msgDartStatus.primary_yaw_offset = motor_controller::AutoAimController.update(
                             msgDartParams.target_auto_aim_x_axis - msgGreenLight.location.x);
                     no_autoaim_count = 0;
                     static char buf[30];
-                    snprintf(buf, sizeof(buf), "Autoaim updated to %d", msgDartParams.primary_yaw_offset);
+                    snprintf(buf, sizeof(buf), "Autoaim updated to %d", msgDartStatus.primary_yaw_offset);
                     dart_mcu_log(buf);
                     motor_controller::MotorYawLSController.target_angle_with_rounds_ =
-                            msgDartParams.primary_yaw + msgDartParams.primary_yaw_offset;
+                            msgDartParams.primary_yaw + msgDartStatus.primary_yaw_offset;
 
                     return true;
                 } else {
@@ -574,7 +574,7 @@ do{                        \
                     if (no_autoaim_count > 5) {
                         motor_controller::MotorYawLSController.target_angle_with_rounds_ =
                                 msgDartParams.primary_yaw;
-                        msgDartParams.primary_yaw_offset = 0;
+                        msgDartStatus.primary_yaw_offset = 0;
                         motor_controller::AutoAimController.reset();
                     }
                     dart_mcu_log("Skipped autoaim update.");
@@ -1234,7 +1234,7 @@ do{                        \
                         } else {
                             // 按照飞镖专属参数进行发射
                             motor_controller::MotorYawLSController.target_angle_with_rounds_ =
-                                    msgDartProtocols.primary_yaw + msgDartProtocols.primary_yaw_offset +
+                                    msgDartProtocols.primary_yaw + msgDartStatus.primary_yaw_offset +
                                     msgDartProtocols.auxiliary_yaw_offsets[msgDartStatus.dart_launch_process];
                             fsm.custom<Dart_FSM>()->ActionMatch_Launch_State = 1;
                             fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ = xTaskGetTickCount();
