@@ -25,7 +25,7 @@ CONFIG_PATH=~/dart-ros2-workspace/src/dart_launcher/config/
 
 # 1. Start nodes in the background
 echo -e "${BLUE}Starting nodes...${NC}"
-ros2 run dart_test mock_dartmcu_node & > /dev/null
+ros2 run dart_test mock_dartmcu_node &
 MOCK_NODE_PID=$!
 
 ros2 run dart_launcher node_dart_param_gateway --ros-args --params-file $CONFIG_PATH/node_dart_param_gateway.yaml &
