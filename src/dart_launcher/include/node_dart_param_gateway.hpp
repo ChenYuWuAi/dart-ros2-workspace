@@ -56,6 +56,7 @@ public:
     rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn on_error(const rclcpp_lifecycle::State &previous_state) override;
 
 private:
+    void daemon_thread_func();
     // ROS2 Lifecycle Node
     rclcpp::Node::SharedPtr node_;
 

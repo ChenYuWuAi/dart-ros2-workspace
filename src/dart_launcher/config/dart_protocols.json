@@ -1,23 +1,22 @@
 {
-    "auto_aim_enabled": false,
+    "auto_aim_enabled": true,
     "auxiliary_force_offsets": [
-        0,
-        0,
-        0,
-        0
+        980000,
+        -550000,
+        -450000,
+        -620000
     ],
     "auxiliary_yaw_offsets": [
-        0,
-        0,
-        0,
-        0
+        1000,
+        6000,
+        4000,
+        2000
     ],
     "dart_launch_process_offset_begin": 0,
     "dart_launch_process_offset_end": 3,
-    "last_param_update_time": 1746806762437,
-    "primary_force": 6000000,
-    "primary_force_offset": 999,
-    "primary_yaw": 40000,
-    "primary_yaw_offset": 0,
-    "target_auto_aim_x_axis": 640.0
+    "last_param_update_time": 1746951877842,
+    "primary_force": 15300000,
+    "primary_force_offset": 0,
+    "primary_yaw": 6450,
+    "target_auto_aim_x_axis": 670.0
 }
