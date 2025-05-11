@@ -3,12 +3,20 @@ set -e
 
 export BASE_PATH=/project/$MICROROS_LIBRARY_FOLDER
 
-######## Check existing library ########
-if [ -f "$BASE_PATH/libmicroros/libmicroros.a" ]; then
-    echo "micro-ROS library found. Skipping..."
-    echo "Delete $MICROROS_LIBRARY_FOLDER/libmicroros/ for rebuild."
-    exit 0
+# 检查代理是否可用
+if curl -s http://www.google.com > /dev/null; then
+    echo "Proxy is working"
+else
+    echo "Proxy is not working"
+    exit 1
 fi
+
+######## Check existing library ########
+#if [ -f "$BASE_PATH/libmicroros/libmicroros.a" ]; then
+#    echo "micro-ROS library found. Skipping..."
+#    echo "Delete $MICROROS_LIBRARY_FOLDER/libmicroros/ for rebuild."
+#    exit 0
+#fi
 ######## Trying to retrieve CFLAGS ########
 export RET_CFLAGS=$(find /project -type f -name *.mk -exec cat {} \; | python3 $BASE_PATH/library_generation/extract_flags.py)
 RET_CODE=$?

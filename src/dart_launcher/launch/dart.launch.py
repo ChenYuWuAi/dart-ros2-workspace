@@ -1,33 +1,49 @@
 # 导入库
 from launch import LaunchDescription
 from launch_ros.actions import Node
+from launch.actions import TimerAction, ExecuteProcess
 import os
 
 
 def generate_launch_description():
-    node_lvgl_ui = Node(package="dart_launcher", executable="node_lvgl_ui")
-    # 日志 DEBUG级别
-    node_can_agent = Node(
-        package="dart_launcher",
-        executable="node_can_agent",
-        parameters=[{"log_level": "debug"}],
+    # 获取配置文件路径
+    config_file_path = os.path.join(
+        os.getenv('PROJECT_DIR', '/home/devcontainers/dart-ros2-workspace'),
+        'src/dart_launcher/config/node_dart_param_gateway.yaml'
     )
-    node_dart_config = Node(package="dart_launcher", executable="node_dart_config")
-    node_camera = Node(package="dart_detector", executable="camera_node")
-    node_dart_detector = Node(package="dart_detector", executable="dart_detector_node")
-    node_logger_dog = Node(package="dart_launcher", executable="node_dart_logger_dog")
-    # DOMAIN ID = 7
-    os.environ["ROS_DOMAIN_ID"] = "7"
-    # 创建LaunchDescription对象launch_description,用于描述launch文件
-    launch_description = LaunchDescription(
-        [
-            node_logger_dog,
-            node_camera,
-            node_dart_config,
-            node_dart_detector,
-            node_lvgl_ui,
-            node_can_agent,
-        ]
+
+    # 定义节点
+    node_dart_param_gateway = Node(
+        package='dart_launcher',
+        executable='node_dart_param_gateway',
+        name='node_dart_param_gateway',
+        parameters=[config_file_path],
+        output='screen'
     )
-    # 返回让ROS2根据launch描述执行节点
+
+    # 定义生命周期控制
+     # 定时调用 lifecycle 命令，先 transition 到 'configure'
+    configure_transition = TimerAction(
+        period=2.0,  # 延时 2 秒后执行
+        actions=[ExecuteProcess(
+            cmd=['ros2', 'lifecycle', 'set', '/node_dart_param_gateway', 'configure'],
+            output='screen'
+        )]
+    )
+
+    # 再 transition 到 'activate'
+    activate_transition = TimerAction(
+        period=5.0,  # 延时 5 秒后执行
+        actions=[ExecuteProcess(
+            cmd=['ros2', 'lifecycle', 'set', '/node_dart_param_gateway', 'activate'],
+            output='screen'
+        )]
+    )
+
+    # 创建LaunchDescription
+    launch_description = LaunchDescription([
+        node_dart_param_gateway,
+        configure_transition,
+        activate_transition
+    ])
     return launch_description

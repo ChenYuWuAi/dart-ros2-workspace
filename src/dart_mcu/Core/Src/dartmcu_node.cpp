@@ -156,6 +156,8 @@ void microros_node_task(void) {
                     LED::setLED(
                             LED::LED_GREEN, true);
                     LED::led_flow.flow_state_ = LED::LED_Flow_State::FLOW_NORMAL;
+                    // 同步时间
+                    rmw_uros_sync_session(1000);
                 }
                 break;
             case AGENT_CONNECTED:
@@ -219,6 +221,8 @@ void timer_send_status_callback(rcl_timer_t *timer, int64_t last_call_time) {
             last_send_tick = velocity_meter_result.record_time;
             msgDartStatus.last_launch_time = rmw_uros_epoch_millis();
         }
+        msgDartStatus.header.stamp.sec = rmw_uros_epoch_millis() / 1000;
+        msgDartStatus.header.stamp.nanosec = rmw_uros_epoch_nanos() % 1000000000;
         rcl_publish(&publisher_status, &msgDartStatus, nullptr);
     }
 }

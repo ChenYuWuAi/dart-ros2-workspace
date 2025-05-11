@@ -56,6 +56,7 @@ public:
     rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn on_error(const rclcpp_lifecycle::State &previous_state) override;
 
 private:
+    void daemon_thread_func();
     // ROS2 Lifecycle Node
     rclcpp::Node::SharedPtr node_;
 
@@ -67,8 +68,6 @@ private:
     // Subscriber
     // for string json params
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr dart_qr_param_sub_;
-    // for launcher param subscription
-    rclcpp::Subscription<dart_msgs::msg::DartLauncherParams>::SharedPtr dart_param_sub_;
     // for status subscription
     rclcpp::Subscription<dart_msgs::msg::DartLauncherStatus>::SharedPtr dart_status_sub_;
     // for greenlight detector
@@ -80,6 +79,10 @@ private:
 
     // Dart_status (包含实际从MCU接收到的params和protocols)
     dart_msgs::msg::DartLauncherStatus dart_status_;
+
+    // 上次从MCU接收到Status的时间，用于判断MCU节点是否在线
+    rclcpp::Time last_status_time_;
+    bool mcu_online_;
 
     std::thread daemon_thread_;
     bool daemon_running_;

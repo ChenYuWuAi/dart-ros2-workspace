@@ -24,8 +24,6 @@ extern "C"
 typedef struct dart_msgs__msg__DartLauncherParams
 {
   int32_t primary_yaw;
-  /// 用于视觉自瞄
-  int32_t primary_yaw_offset;
   int32_t primary_force;
   /// 用于根据测速校准
   int32_t primary_force_offset;

@@ -1,3 +1,4 @@
+// NOLINT: This file starts with a BOM since it contain non-ASCII characters
 // generated from rosidl_generator_c/resource/idl__struct.h.em
 // with input from dart_msgs:msg/DartLauncherStatus.idl
 // generated code does not contain a copyright notice
@@ -48,6 +49,8 @@ typedef struct dart_msgs__msg__DartLauncherStatus
   uint8_t dart_remaining_time;
   uint16_t latest_launch_cmd_time;
   uint16_t stage_remain_time;
+  /// 用于视觉自瞄
+  int32_t primary_yaw_offset;
   dart_msgs__msg__DartLauncherParams params;
   dart_msgs__msg__DartLauncherParams protocols;
 } dart_msgs__msg__DartLauncherStatus;
