@@ -3,6 +3,14 @@ set -e
 
 export BASE_PATH=/project/$MICROROS_LIBRARY_FOLDER
 
+# 检查代理是否可用
+if curl -s http://www.google.com > /dev/null; then
+    echo "Proxy is working"
+else
+    echo "Proxy is not working"
+    exit 1
+fi
+
 ######## Check existing library ########
 if [ -f "$BASE_PATH/libmicroros/libmicroros.a" ]; then
     echo "micro-ROS library found. Skipping..."
