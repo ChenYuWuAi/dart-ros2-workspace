@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 
 # 检查/dart_launcher_detector是否存在
 

@@ -39,8 +39,8 @@ public:
 
         if (gui)
         {
-            cv::imshow("Detection Results", img);
-            cv::waitKey(0);
+            // cv::imshow("Detection Results", img);
+            // cv::waitKey(0);
         }
     }
 

@@ -20,7 +20,7 @@
     detect:
       greenlight_detect:
         hmin: 53
-        hmax: 79
+        hmax: 90
         smin: 61
         smax: 255
         vmin: 57
