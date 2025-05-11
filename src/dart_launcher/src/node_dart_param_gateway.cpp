@@ -175,6 +175,10 @@ void NodeDartParamGateway::daemon_thread_func()
             if (mcu_online_)
             {
                 RCLCPP_INFO(get_logger(), "MCU node is online now.");
+                // Buzzer
+                auto buzzer_msg = std_msgs::msg::Int32();
+                buzzer_msg.data = BuzzerSound::BuzzerWin10PlugIn;
+                dart_buzzer_cmd_pub_->publish(buzzer_msg);
             }
             else
             {
@@ -582,7 +586,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
         dart_status_sub_.reset();
     if (dart_qr_param_sub_)
         dart_qr_param_sub_.reset();
-    
+
     RCLCPP_INFO(get_logger(), "NodeDartParamGateway resources cleaned up.");
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }

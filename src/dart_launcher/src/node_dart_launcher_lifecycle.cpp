@@ -106,7 +106,7 @@ private:
         RCLCPP_INFO(get_logger(), "All nodes shutdown transitions triggered.");
 
         // Play shutdown sound
-        buzzer_sound_effect(BuzzerSound::BuzzerWinxpLogout);
+        buzzer_sound_effect(BuzzerSound::BuzzerWin10Remove);
 
         // Shutdown the node
         RCLCPP_INFO(get_logger(), "Shutting down lifecycle manager...");
@@ -147,7 +147,6 @@ private:
             node_states_[p] = lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE;
         }
         RCLCPP_INFO(get_logger(), "Startup sequence complete.");
-        buzzer_sound_effect(BuzzerSound::BuzzerWinxp);
     }
 
     bool change_each(const std::string &node_name, uint8_t transition)
