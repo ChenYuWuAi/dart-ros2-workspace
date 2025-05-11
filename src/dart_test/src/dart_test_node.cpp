@@ -45,7 +45,7 @@ public:
             {
                 this->current_params_ = *msg;
                 RCLCPP_INFO(this->get_logger(), "Received new params and updated.");
-                RCLCPP_INFO(this->get_logger(), "Msg Timestamp: %u", current_params_.last_param_update_time);
+                RCLCPP_INFO(this->get_logger(), "Msg last_param_update_time: %lu", current_params_.last_param_update_time);
             });
         sub_protocols_ = this->create_subscription<dart_msgs::msg::DartLauncherParams>(
             "/dart_launcher_mcu/cmd_protocols", qos_reliable,
@@ -53,7 +53,7 @@ public:
             {
                 this->current_protocols_ = *msg;
                 RCLCPP_INFO(this->get_logger(), "Received new protocols and updated.");
-                RCLCPP_INFO(this->get_logger(), "Msg Timestamp: %u", current_protocols_.last_param_update_time);
+                RCLCPP_INFO(this->get_logger(), "Msg last_param_update_time: %lu", current_protocols_.last_param_update_time);
             });
 
         // Subscriber for buzzer sound effect commands
@@ -86,8 +86,8 @@ private:
         msg.protocols = current_protocols_;
         publisher_->publish(msg);
 
-        RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 
-            1000, "Publishing DartLauncherStatus: %d", msg.header.stamp.sec);
+        RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(),
+                              1000, "Publishing DartLauncherStatus: %d", msg.header.stamp.sec);
     }
 
     rclcpp::Publisher<DartLauncherStatus>::SharedPtr publisher_;
