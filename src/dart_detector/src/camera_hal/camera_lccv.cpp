@@ -52,6 +52,7 @@ namespace CameraHAL
 
     bool CameraDriver_LCCV::write(std::string para_name, std::string para_value)
     {
+        std::cout << "Setting parameter: " << para_name << " = " << para_value << std::endl;
         if (para_name == "Width")
         {
             camera.options->video_width = std::stoi(para_value);
@@ -86,7 +87,46 @@ namespace CameraHAL
         {
             camera.options->framerate = std::stoi(para_value);
         }
-
+        else if (para_name == "ExposureMode")
+        {
+            if (para_value == "auto")
+            {
+                camera.options->setExposureMode(EXPOSURE_NORMAL);
+            }
+            else if (para_value == "short")
+            {
+                camera.options->setExposureMode(EXPOSURE_SHORT);
+            }
+            else if (para_value == "custom")
+            {
+                camera.options->setExposureMode(EXPOSURE_CUSTOM);
+            }
+            else
+            {
+                std::cerr << "Unsupported exposure mode: " << para_value << std::endl;
+                return false;
+            }
+        }
+        else if (para_name == "ExposureTime")
+        {
+            camera.options->shutter = std::stof(para_value);
+        }
+        else if (para_name == "Brightness")
+        {
+            camera.options->brightness = std::stof(para_value);
+        }
+        else if (para_name == "Contrast")
+        {
+            camera.options->contrast = std::stof(para_value);
+        }
+        else if (para_name == "Saturation")
+        {
+            camera.options->saturation = std::stof(para_value);
+        }
+        else if (para_name == "Sharpness")
+        {
+            camera.options->sharpness = std::stof(para_value);
+        }
         else
         {
             std::cerr << "Unsupported parameter: " << para_name << std::endl;

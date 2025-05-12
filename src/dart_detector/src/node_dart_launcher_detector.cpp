@@ -172,7 +172,7 @@ void NodeDartLauncherDetector::on_parameter_event(const rclcpp::Parameter &param
 }
 
 NodeDartLauncherDetector::NodeDartLauncherDetector(rclcpp::NodeOptions options)
-    : rclcpp_lifecycle::LifecycleNode("dart_launcher_detector", options),
+    : rclcpp_lifecycle::LifecycleNode("node_dart_launcher_detector", options),
       running_(false), lccv_enabled_(true), dh_enabled_(true)
 {
 }
