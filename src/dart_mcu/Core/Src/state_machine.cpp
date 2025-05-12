@@ -1227,10 +1227,6 @@ do{                        \
                     motor_controller::E_PID_Velocity_Angle_Controller_State::ANGLE_CONTROL);
             motor_controller::MotorTriggerLSController.set_state(
                     motor_controller::E_PID_Velocity_Angle_Controller_State::ANGLE_CONTROL);
-            motor_controller::MotorLoadController[0].set_state(
-                    motor_controller::E_PID_Velocity_Angle_Controller_State::VELOCITY_CONTROL);
-            motor_controller::MotorLoadController[1].set_state(
-                    motor_controller::E_PID_Velocity_Angle_Controller_State::VELOCITY_CONTROL);
 
             motor_controller::MotorTriggerLSController.target_angle_with_rounds_ =
                     msgDartProtocols.primary_force + msgDartProtocols.primary_force_offset +
@@ -1288,7 +1284,6 @@ do{                        \
 
                 case 3:
                     // 向上运动
-                    // TODO: 比赛模式移植遥控模式的发射缓动
                     if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
                         CONFIG_MOTOR_LOAD_ANGLE_UP) {
                         base_velocity = -CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD / 5;
