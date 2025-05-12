@@ -15,7 +15,6 @@ def generate_launch_description():
     node_dart_param_gateway = Node(
         package="dart_launcher",
         executable="node_dart_param_gateway",
-        name="node_dart_param_gateway",
         parameters=[
             os.path.join(
                 home_path,
@@ -27,8 +26,7 @@ def generate_launch_description():
 
     node_dart_launcher_detector = Node(
         package="dart_detector",
-        executable="node_launcher_detector",
-        name="node_dart_launcher_detector",
+        executable="node_dart_launcher_detector",
         parameters=[
             os.path.join(
                 home_path,
