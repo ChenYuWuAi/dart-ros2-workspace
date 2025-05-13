@@ -675,6 +675,10 @@ do{                        \
                             motor_controller::MotorYawLSController.target_velocity_ = 20;
                         else if (RC_Data.ch0 >= 1310)
                             motor_controller::MotorYawLSController.target_velocity_ = 100;
+                        if (yaw_switch_state == Triggered)
+                        {
+                            motor_controller::MotorYawLSController.target_velocity_ = 0;
+                        }
                     }
                 }
 
