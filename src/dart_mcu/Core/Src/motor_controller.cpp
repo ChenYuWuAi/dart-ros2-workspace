@@ -24,7 +24,7 @@ namespace motor_controller
 
     pid_angle_velocity_controller<double> MotorYawLSController(
         pid_controller<double>(13, 0.3, 0.1, 360000, 4300, 13000, 16386),
-        pid_controller<double>(0.4, 0, 0.01, 200000, 10000, 200, 100),
+        pid_controller<double>(0.4, 0, 0.01, 200000, 10000, 200, 350),
         &motor::MotorYawLS,
         VELOCITY_CONTROL
     );
@@ -45,12 +45,16 @@ namespace motor_controller
 
     };
 
-
-    pid_controller<double> AutoAimController = pid_controller<double>(20, 5.0, 0.0, 100000.0, 50000.0, 300000.0,
+    // 角度环自瞄PID
+    pid_controller<double> AutoAimController = pid_controller<double>(20, 5.5, 0.09, 100000.0, 50000.0, 300000.0,
                                                                             100000.0);
 
+    // //速度环自瞄PID
+    // pid_controller<double> AutoAimController = pid_controller<double>(15, 0.0, 0.0, 100000.0, 50000.0, 300000.0,
+    //                                                                         100000.0);
+
     double motor_load_sync_offset = 0;
-    pid_controller<double> MotorLoadSyncController = pid_controller<double>(0.05, 0.07, 0.1, 1000.0, 500.0, 300.0,
+    pid_controller<double> MotorLoadSyncController = pid_controller<double>(0.05, 0.05, 0.1, 1000.0, 500.0, 300.0,
                                                                             30.0);
 
     template<typename T>
