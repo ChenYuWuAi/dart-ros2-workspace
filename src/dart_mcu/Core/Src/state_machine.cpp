@@ -1235,7 +1235,7 @@ do{                        \
             // TODO:计算好primary_yaw_offset的值，并进行调试
             motor_controller::MotorTriggerLSController.target_angle_with_rounds_ =
                 msgDartProtocols.primary_force + msgDartProtocols.primary_force_offset +
-                msgDartProtocols.auxiliary_force_offsets[msgDartStatus.dart_aunch_process];
+                msgDartProtocols.auxiliary_force_offsets[msgDartStatus.dart_launch_process];
 
             // 判断是否更新自瞄
             if (!updateAutoAim(msgDartProtocols) && !msgDartProtocols.auto_aim_enabled)
