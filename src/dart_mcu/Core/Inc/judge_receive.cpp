@@ -79,11 +79,12 @@ TickType_t ext_judge_last_receive_time = 0;
 
 uint8_t judge_rx_buffer[2][UART3_MAX_RECEIVE_BUFFER_LENGTH];
 
-void judge_Reset(){
-    // 取消初始化然后重新初始化
-    HAL_UARTEx_ReceiveToIdle_DMA(&huart3, judge_rx_buffer[0],
-                                 UART3_MAX_RECEIVE_BUFFER_LENGTH);
+void judge_Reset() {
+    // 取消初始化然后重新初始化，使用宏定义增强可读性和维护性
+    HAL_UARTEx_ReceiveToIdle_DMA(REFEREE_UART_HANDLE, REFEREE_UART_RXBUFFER[0],
+                                 REFEREE_UART_BUFFER_LENGTH);
 }
+
 /**
  * @brief  裁判系统接收数据函数
  * @note
@@ -95,27 +96,61 @@ void RefereeReceive(uint8_t judge_receive_counter, uint8_t *judge_receive_buffer
     uint8_t Judge_SOF = 0;
     uint16_t DataLength, Judge_CmdID;
 
-    //循环扫描头帧
+    // 检查参数有效性
+    if (judge_receive_buffer == NULL || judge_receive_counter == 0 ||
+        judge_receive_counter > UART3_MAX_RECEIVE_BUFFER_LENGTH) {
+        return;
+    }
+
+    // 循环扫描头帧
     while (Judge_SOF < judge_receive_counter) {
+        // 边界检查：确保当前索引有效
+        if (Judge_SOF >= judge_receive_counter) {
+            break;
+        }
+
         if (judge_receive_buffer[Judge_SOF] == 0XA5) {
-            //这一帧数据的指令ID和数据长度
+            // 检查是否有足够的数据读取命令ID
+            if (Judge_SOF + JUDGE_CMDID_OFFSET + 1 >= judge_receive_counter) {
+                break; // 不足以读取命令ID
+            }
+
+            // 计算这一帧数据的指令ID
             Judge_CmdID = judge_receive_buffer[JUDGE_CMDID_OFFSET + Judge_SOF] |
                           (judge_receive_buffer[JUDGE_CMDID_OFFSET + 1 + Judge_SOF] << 8);
+
+            // 检查是否有足够的数据读取长度字段
+            if (Judge_SOF + JUDGE_DATALENGTH_OFFSET + 1 >= judge_receive_counter) {
+                break; // 不足以读取数据长度
+            }
+
+            // 获取数据长度
             DataLength = judge_receive_buffer[JUDGE_DATALENGTH_OFFSET + Judge_SOF] |
                          (judge_receive_buffer[JUDGE_DATALENGTH_OFFSET + 1 + Judge_SOF] << 8);
-            //校验一帧数据
+
+            // 防止数据长度无效导致越界
+            if (DataLength == 0 || DataLength > UART3_MAX_RECEIVE_BUFFER_LENGTH ||
+                Judge_SOF + JUDGE_DATA_LENGTH(DataLength) > judge_receive_counter) {
+                // 无效长度或数据不完整，跳过当前字节
+                Judge_SOF++;
+                continue;
+            }
+
+            // 校验一帧数据
             if (Verify_CRC_Check_Sum(judge_receive_buffer + Judge_SOF, DataLength)) {
-                if (Judge_CmdID == 0x201)
-                    temp_length = DataLength;
-                //数据处理，读取
+                // 处理数据
                 Referee_Receive_Data_Processing(Judge_SOF, Judge_CmdID, judge_receive_buffer);
 
-                //跳到下一帧数据的头帧
+                // 跳到下一帧数据的头帧
                 Judge_SOF += JUDGE_DATA_LENGTH(DataLength);
-            } else
-                Judge_SOF += JUDGE_DATA_LENGTH(0);
-        } else
+            } else {
+                // CRC校验失败，跳过当前字节
+                Judge_SOF++;
+            }
+        } else {
+            // 当前字节不是帧头，继续查找
             Judge_SOF++;
+        }
     }
 }
 
@@ -129,137 +164,203 @@ void RefereeReceive(uint8_t judge_receive_counter, uint8_t *judge_receive_buffer
 void Referee_Receive_Data_Processing(uint8_t SOF, uint16_t CmdID, uint8_t *judge_receive_buffer) {
     // 更新ext_last_receive_time
     ext_judge_last_receive_time = xTaskGetTickCount();
-    switch (CmdID) {
-        //1.	比赛状态(0x0001)	1Hz
-        case GAME_STATUS: {
-            memcpy(&ext_game_status, (judge_receive_buffer + JUDGE_DATA_OFFSET + SOF), GAME_STATUS_DATA_SIZE);
-            break;
-        }
-            //2.	比赛结果(0x0002)
-        case GAME_RESULT: {
-            memcpy(&ext_game_result, (judge_receive_buffer + JUDGE_DATA_OFFSET + SOF), GAME_RESULT_DATA_SIZE);
-            break;
-        }
-            //3.	比赛机器人血量数据（0x0003）
-        case ROBOT_HP: {
-            memcpy(&ext_game_robot_HP, (judge_receive_buffer + JUDGE_DATA_OFFSET + SOF), ROBOT_HP_DATA_SIZE);
-            break;
+
+    // 检查SOF合法性
+    if (SOF >= UART3_MAX_RECEIVE_BUFFER_LENGTH || judge_receive_buffer == NULL) {
+        return;
+    }    // 计算数据包实际可用大小（保守估计）
+    uint16_t max_data_size = 0;
+    uint8_t *data_ptr = NULL;
+
+    if (SOF + JUDGE_DATA_OFFSET < UART3_MAX_RECEIVE_BUFFER_LENGTH) {
+        max_data_size = UART3_MAX_RECEIVE_BUFFER_LENGTH - JUDGE_DATA_OFFSET - SOF;
+        data_ptr = judge_receive_buffer + JUDGE_DATA_OFFSET + SOF;
+
+        // 额外的指针合法性检查
+        if (data_ptr == NULL || data_ptr < judge_receive_buffer ||
+            data_ptr >= judge_receive_buffer + UART3_MAX_RECEIVE_BUFFER_LENGTH) {
+            return;
         }
 
-            //4.	场地事件数据（0x0101）
-        case EVENT_DATA: {
-            memcpy(&ext_event_data, (judge_receive_buffer + JUDGE_DATA_OFFSET + SOF), EVENTDATA_DATA_SIZE);
-            break;
-        }
-            //5.	场地补给站动作标识数据（0x0102）
-        case SUPPLY_PROJECTILE_ACTION: {
-            memcpy(&ext_supply_projectile_action, (judge_receive_buffer + JUDGE_DATA_OFFSET + SOF),
-                   SUPPLY_PROJECTILE_ACTION_DATA_SIZE);
-            break;
-        }
-            //6.    裁判警告数据(0x0104)
-        case REFEREE_WARNING: {
-            memcpy(&ext_referee_warning, (judge_receive_buffer + JUDGE_DATA_OFFSET + SOF), REFEREE_WARNING_DATA_SIZE);
-            break;
-        }
-            //7.    飞镖(0x0105)
-        case DART_INFO: {
-            memcpy(&ext_dart_info, (judge_receive_buffer + JUDGE_DATA_OFFSET + SOF), DART_INFO_DATA_SIZE);
-            break;
-        }
-            //8.	机器人状态数据（0x0201）
-        case ROBOT_STATUS: {
-            memcpy(&ext_game_robot_status, (judge_receive_buffer + JUDGE_DATA_OFFSET + SOF), ROBOT_STATUS_DATA_SIZE);
-            break;
-        }
-            //9.	实时功率热量数据(0x0202)
-        case POWER_HEAT_DATA: {
-            memcpy(&ext_power_heat_data, (judge_receive_buffer + JUDGE_DATA_OFFSET + SOF), POWER_HEAT_DATA_SIZE);
-            break;
-        }
-            //10.机器人位置数据(0X0203)
-        case ROBOT_POS: {
-            memcpy(&ext_robot_pos, (judge_receive_buffer + JUDGE_DATA_OFFSET + SOF), ROBOT_POS_DATA_SIZE);
-            break;
-        }
-            //11.机器人增益数据(0X0204)
-        case BUFF: {
-            memcpy(&ext_buff, (judge_receive_buffer + JUDGE_DATA_OFFSET + SOF), BUFF_SIZE);
-            break;
-        }
-            //12.空中机器人能量状态数据(0X0205)
-        case AIR_SUPPORT_DATA : {
-            memcpy(&ext_air_support_data, (judge_receive_buffer + JUDGE_DATA_OFFSET + SOF), AIR_SUPPORTDATA_DATA_SIZE);
-            break;
-        }
-            //13.伤害状态数据(0X0206)
-        case HURT_DATA : {
-            memcpy(&ext_hurt_data, (judge_receive_buffer + JUDGE_DATA_OFFSET + SOF), ROBOT_HURT_DATA_SIZE);
-            break;
-        }
-            //14.实时射击数据(0X0207)
-        case SHOOT_DATA: {
-            memcpy(&ext_shoot_data, (judge_receive_buffer + JUDGE_DATA_OFFSET + SOF), SHOOTDATA_DATA_SIZE);
-            break;
-        }
-            //15.子弹剩余发送数(0X0208)
-        case PROJECTILE_ALLOWANCE: {
-            memcpy(&ext_projectile_allowance, (judge_receive_buffer + JUDGE_DATA_OFFSET + SOF),
-                   PROJECTILE_ALLOWANCE_DATA_SIZE);
-            break;
-        }
-            //16.机器人 RFID 状态(0X0209)
-        case RFID_STATUS: {
-            memcpy(&ext_rfid_status, (judge_receive_buffer + JUDGE_DATA_OFFSET + SOF), RFID_STATUS_DATA_SIZE);
-            break;
-        }
-            //17.飞镖机器人客户端指令数据(0X020A)
-        case DART_CLIENT_CMD: {
-            memcpy(&ext_dart_client_cmd, (judge_receive_buffer + JUDGE_DATA_OFFSET + SOF), DART_CLIENT_CMD_DATA_SIZE);
-            break;
-        }
-            //18.地面机器人位置数据(0X020B)
-        case GROUND_ROBOT_POS: {
-            memcpy(&ext_ground_robot_pos, (judge_receive_buffer + JUDGE_DATA_OFFSET + SOF), GROUND_ROBOT_POS_DATA_SIZE);
-            break;
-        }
-            //19.雷达标记进度数据(0X020C)
-        case RADAR_MARK_DATA: {
-            memcpy(&ext_radar_mark_data, (judge_receive_buffer + JUDGE_DATA_OFFSET + SOF), RADAR_MARK_DATA_SIZE);
-            break;
-        }
-            //20.哨兵自主决策信息同步数据(0X020D)
-        case SENTRY_INFO: {
-            memcpy(&ext_sentry_info, (judge_receive_buffer + JUDGE_DATA_OFFSET + SOF), SENTRY_INFO_DATA_SIZE);
-            break;
-        }
-            //21.雷达自主决策信息同步数据(0X020E)
-        case RADAR_INFO: {
-            memcpy(&ext_radar_info, (judge_receive_buffer + JUDGE_DATA_OFFSET + SOF), RADAR_INFO_DATA_SIZE);
-            break;
-        }
-            //22.机器人交互数据(0X0301)
-        case ROBOT_INTERACTION_DATA: {
-            memcpy(&ext_robot_interaction_data, (judge_receive_buffer + JUDGE_DATA_OFFSET + SOF),
-                   ROBOT_INTERACTIONDATA_DATA_SIZE);
-            break;
-        }
-            //22.自定义控制器与机器人交互数据(0X0302)
-        case CUSTOM_ROBOT_DATA: {
-            memcpy(&ext_custom_robot_data, (judge_receive_buffer + JUDGE_DATA_OFFSET + SOF), CUSTOM_ROBOT_DATA_SIZE);
-            break;
-        }
-            //23.选手端小地图交互数据(0X0303)
-        case MAP_COMMAND: {
-            memcpy(&ext_map_command, (judge_receive_buffer + JUDGE_DATA_OFFSET + SOF), MAP_COMMAND_DATA_SIZE);
-            break;
-        }
-            //24.图传遥控信息数据(0x0304)
-        case REMOTE_CONTROL: {
-            memcpy(&ext_remote_control, (judge_receive_buffer + JUDGE_DATA_OFFSET + SOF), REMOTE_CONTROL_DATA_SIZE);
-            break;
-        }
+        switch (CmdID) {
+            //1.	比赛状态(0x0001)	1Hz
+            case GAME_STATUS: {
+                if (GAME_STATUS_DATA_SIZE <= max_data_size) {
+                    memcpy(&ext_game_status, data_ptr, GAME_STATUS_DATA_SIZE);
+                }
+                break;
+            }
+                //2.	比赛结果(0x0002)
+            case GAME_RESULT: {
+                if (GAME_RESULT_DATA_SIZE <= max_data_size) {
+                    memcpy(&ext_game_result, data_ptr, GAME_RESULT_DATA_SIZE);
+                }
+                break;
+            }
+                //3.	比赛机器人血量数据（0x0003）
+            case ROBOT_HP: {
+                if (ROBOT_HP_DATA_SIZE <= max_data_size) {
+                    memcpy(&ext_game_robot_HP, data_ptr, ROBOT_HP_DATA_SIZE);
+                }
+                break;
+            }
 
+                //4.	场地事件数据（0x0101）
+            case EVENT_DATA: {
+                if (EVENTDATA_DATA_SIZE <= max_data_size) {
+                    memcpy(&ext_event_data, data_ptr, EVENTDATA_DATA_SIZE);
+                }
+                break;
+            }
+                //5.	场地补给站动作标识数据（0x0102）
+            case SUPPLY_PROJECTILE_ACTION: {
+                if (SUPPLY_PROJECTILE_ACTION_DATA_SIZE <= max_data_size) {
+                    memcpy(&ext_supply_projectile_action, data_ptr, SUPPLY_PROJECTILE_ACTION_DATA_SIZE);
+                }
+                break;
+            }
+                //6.    裁判警告数据(0x0104)
+            case REFEREE_WARNING: {
+                if (REFEREE_WARNING_DATA_SIZE <= max_data_size) {
+                    memcpy(&ext_referee_warning, data_ptr, REFEREE_WARNING_DATA_SIZE);
+                }
+                break;
+            }
+                //7.    飞镖(0x0105)
+            case DART_INFO: {
+                if (DART_INFO_DATA_SIZE <= max_data_size) {
+                    memcpy(&ext_dart_info, data_ptr, DART_INFO_DATA_SIZE);
+                }
+                break;
+            }
+                //8.	机器人状态数据（0x0201）
+            case ROBOT_STATUS: {
+                if (ROBOT_STATUS_DATA_SIZE <= max_data_size) {
+                    memcpy(&ext_game_robot_status, data_ptr, ROBOT_STATUS_DATA_SIZE);
+                }
+                break;
+            }
+                //9.	实时功率热量数据(0x0202)
+            case POWER_HEAT_DATA: {
+                if (POWER_HEAT_DATA_SIZE <= max_data_size) {
+                    memcpy(&ext_power_heat_data, data_ptr, POWER_HEAT_DATA_SIZE);
+                }
+                break;
+            }
+                //10.机器人位置数据(0X0203)
+            case ROBOT_POS: {
+                if (ROBOT_POS_DATA_SIZE <= max_data_size) {
+                    memcpy(&ext_robot_pos, data_ptr, ROBOT_POS_DATA_SIZE);
+                }
+                break;
+            }
+                //11.机器人增益数据(0X0204)
+            case BUFF: {
+                if (BUFF_SIZE <= max_data_size) {
+                    memcpy(&ext_buff, data_ptr, BUFF_SIZE);
+                }
+                break;
+            }
+                //12.空中机器人能量状态数据(0X0205)
+            case AIR_SUPPORT_DATA : {
+                if (AIR_SUPPORTDATA_DATA_SIZE <= max_data_size) {
+                    memcpy(&ext_air_support_data, data_ptr, AIR_SUPPORTDATA_DATA_SIZE);
+                }
+                break;
+            }
+                //13.伤害状态数据(0X0206)
+            case HURT_DATA : {
+                if (ROBOT_HURT_DATA_SIZE <= max_data_size) {
+                    memcpy(&ext_hurt_data, data_ptr, ROBOT_HURT_DATA_SIZE);
+                }
+                break;
+            }
+                //14.实时射击数据(0X0207)
+            case SHOOT_DATA: {
+                if (SHOOTDATA_DATA_SIZE <= max_data_size) {
+                    memcpy(&ext_shoot_data, data_ptr, SHOOTDATA_DATA_SIZE);
+                }
+                break;
+            }
+                //15.子弹剩余发送数(0X0208)
+            case PROJECTILE_ALLOWANCE: {
+                if (PROJECTILE_ALLOWANCE_DATA_SIZE <= max_data_size) {
+                    memcpy(&ext_projectile_allowance, data_ptr, PROJECTILE_ALLOWANCE_DATA_SIZE);
+                }
+                break;
+            }
+                //16.机器人 RFID 状态(0X0209)
+            case RFID_STATUS: {
+                if (RFID_STATUS_DATA_SIZE <= max_data_size) {
+                    memcpy(&ext_rfid_status, data_ptr, RFID_STATUS_DATA_SIZE);
+                }
+                break;
+            }
+                //17.飞镖机器人客户端指令数据(0X020A)
+            case DART_CLIENT_CMD: {
+                if (DART_CLIENT_CMD_DATA_SIZE <= max_data_size) {
+                    memcpy(&ext_dart_client_cmd, data_ptr, DART_CLIENT_CMD_DATA_SIZE);
+                }
+                break;
+            }
+                //18.地面机器人位置数据(0X020B)
+            case GROUND_ROBOT_POS: {
+                if (GROUND_ROBOT_POS_DATA_SIZE <= max_data_size) {
+                    memcpy(&ext_ground_robot_pos, data_ptr, GROUND_ROBOT_POS_DATA_SIZE);
+                }
+                break;
+            }
+                //19.雷达标记进度数据(0X020C)
+            case RADAR_MARK_DATA: {
+                if (RADAR_MARK_DATA_SIZE <= max_data_size) {
+                    memcpy(&ext_radar_mark_data, data_ptr, RADAR_MARK_DATA_SIZE);
+                }
+                break;
+            }
+                //20.哨兵自主决策信息同步数据(0X020D)
+            case SENTRY_INFO: {
+                if (SENTRY_INFO_DATA_SIZE <= max_data_size) {
+                    memcpy(&ext_sentry_info, data_ptr, SENTRY_INFO_DATA_SIZE);
+                }
+                break;
+            }
+                //21.雷达自主决策信息同步数据(0X020E)
+            case RADAR_INFO: {
+                if (RADAR_INFO_DATA_SIZE <= max_data_size) {
+                    memcpy(&ext_radar_info, data_ptr, RADAR_INFO_DATA_SIZE);
+                }
+                break;
+            }
+                //22.机器人交互数据(0X0301)
+            case ROBOT_INTERACTION_DATA: {
+                if (ROBOT_INTERACTIONDATA_DATA_SIZE <= max_data_size) {
+                    memcpy(&ext_robot_interaction_data, data_ptr, ROBOT_INTERACTIONDATA_DATA_SIZE);
+                }
+                break;
+            }
+                //22.自定义控制器与机器人交互数据(0X0302)
+            case CUSTOM_ROBOT_DATA: {
+                if (CUSTOM_ROBOT_DATA_SIZE <= max_data_size) {
+                    memcpy(&ext_custom_robot_data, data_ptr, CUSTOM_ROBOT_DATA_SIZE);
+                }
+                break;
+            }
+                //23.选手端小地图交互数据(0X0303)
+            case MAP_COMMAND: {
+                if (MAP_COMMAND_DATA_SIZE <= max_data_size) {
+                    memcpy(&ext_map_command, data_ptr, MAP_COMMAND_DATA_SIZE);
+                }
+                break;
+            }
+                //24.图传遥控信息数据(0x0304)
+            case REMOTE_CONTROL: {
+                if (REMOTE_CONTROL_DATA_SIZE <= max_data_size) {
+                    memcpy(&ext_remote_control, data_ptr, REMOTE_CONTROL_DATA_SIZE);
+                }
+                break;
+            }
+
+        }
     }
 }
 
@@ -302,7 +403,8 @@ unsigned char Get_CRC8_Check_Sum(unsigned char *pchMessage, unsigned int dwLengt
 */
 unsigned int Verify_CRC8_Check_Sum(unsigned char *pchMessage, unsigned int dwLength) {
     unsigned char ucExpected = 0;
-    if ((pchMessage == 0) || (dwLength <= 2))
+    // 验证指针有效性和长度合理性
+    if ((pchMessage == NULL) || (dwLength <= 2) || (dwLength > UART3_MAX_RECEIVE_BUFFER_LENGTH))
         return 0;
     ucExpected = Get_CRC8_Check_Sum(pchMessage, dwLength - 1, CRC8_INIT);
     return (ucExpected == pchMessage[dwLength - 1]);
@@ -315,7 +417,8 @@ unsigned int Verify_CRC8_Check_Sum(unsigned char *pchMessage, unsigned int dwLen
 */
 void Append_CRC8_Check_Sum(unsigned char *pchMessage, unsigned int dwLength) {
     unsigned char ucCRC = 0;
-    if ((pchMessage == 0) || (dwLength <= 2))
+    // 检查指针有效性和长度范围
+    if ((pchMessage == NULL) || (dwLength <= 2) || (dwLength > UART3_MAX_RECEIVE_BUFFER_LENGTH))
         return;
     ucCRC = Get_CRC8_Check_Sum((unsigned char *) pchMessage, dwLength - 1, CRC8_INIT);
     pchMessage[dwLength - 1] = ucCRC;
@@ -381,7 +484,8 @@ uint16_t Get_CRC16_Check_Sum(uint8_t *pchMessage, uint32_t dwLength, uint16_t wC
 */
 uint32_t Verify_CRC16_Check_Sum(uint8_t *pchMessage, uint32_t dwLength) {
     uint16_t wExpected = 0;
-    if ((pchMessage == NULL) || (dwLength <= 2)) {
+    // 检查指针有效性和长度范围
+    if ((pchMessage == NULL) || (dwLength <= 2) || (dwLength > UART3_MAX_RECEIVE_BUFFER_LENGTH)) {
         return 0;
     }
     wExpected = Get_CRC16_Check_Sum(pchMessage, dwLength - 2, CRC_INIT);
@@ -396,7 +500,8 @@ uint32_t Verify_CRC16_Check_Sum(uint8_t *pchMessage, uint32_t dwLength) {
 */
 void Append_CRC16_Check_Sum(uint8_t *pchMessage, uint32_t dwLength) {
     uint16_t wCRC = 0;
-    if ((pchMessage == NULL) || (dwLength <= 2)) {
+    // 检查指针有效性和长度范围
+    if ((pchMessage == NULL) || (dwLength <= 2) || (dwLength > UART3_MAX_RECEIVE_BUFFER_LENGTH)) {
         return;
     }
     wCRC = Get_CRC16_Check_Sum((uint8_t *) pchMessage, dwLength - 2, CRC_INIT);

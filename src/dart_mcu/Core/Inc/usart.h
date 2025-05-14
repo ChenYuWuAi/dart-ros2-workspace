@@ -39,6 +39,18 @@ extern UART_HandleTypeDef huart3;
 /* USER CODE BEGIN Private defines */
 #define UART1_MAX_RECEIVE_BUFFER_LENGTH 50
 
+// 遥控器UART相关宏定义
+#define RC_UART                       huart1
+#define RC_UART_HANDLE                &RC_UART
+#define RC_UART_RXBUFFER              uart1RecBuffer
+#define RC_UART_BUFFER_LENGTH         UART1_MAX_RECEIVE_BUFFER_LENGTH
+
+// 裁判系统UART相关宏定义
+#define REFEREE_UART                  huart3
+#define REFEREE_UART_HANDLE           &REFEREE_UART
+#define REFEREE_UART_RXBUFFER         judge_rx_buffer
+#define REFEREE_UART_BUFFER_LENGTH    UART3_MAX_RECEIVE_BUFFER_LENGTH
+
 /* USER CODE END Private defines */
 
 void MX_USART1_UART_Init(void);

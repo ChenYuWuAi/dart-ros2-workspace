@@ -59,7 +59,7 @@ rclc_support_t support;
 rcl_timer_t timer_log_update, timer_status_update;
 
 rclc_executor_t executor;
-std_msgs__msg__Int64 msgInt64;
+std_msgs__msg__Int32 msgInt32;
 std_msgs__msg__String msgString;
 
 char msgString_buf[LOG_BUF_LEN];
@@ -146,6 +146,13 @@ void microros_node_task(void) {
             case WAITING_AGENT:
                 EXECUTE_EVERY_N_MS(1000, state = (RMW_RET_OK == rmw_uros_ping_agent(50, 1)) ? AGENT_AVAILABLE
                                                                                             : WAITING_AGENT;);
+
+                // 每10s重启一次USB
+                EXECUTE_EVERY_N_MS(10000, {
+                    USB_DEVICE_Stop();
+                    vTaskDelay(200);
+                    USB_DEVICE_Start();
+                });
                 break;
             case AGENT_AVAILABLE:
                 state = (true == create_entities()) ? AGENT_CONNECTED : WAITING_AGENT;
@@ -166,6 +173,10 @@ void microros_node_task(void) {
                                                                                        : AGENT_DISCONNECTED;);
                 if (state == AGENT_CONNECTED) {
                     rclc_executor_spin_some(&executor, RCL_MS_TO_NS(1000));
+                    // 每60s同步时间
+                    EXECUTE_EVERY_N_MS(60000, {
+                        rmw_uros_sync_session(1000);
+                    });
                 } else if (state == AGENT_DISCONNECTED) {
                     soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_remove), false, false);
                     LED::setLED(LED::LED_GREEN, false);
@@ -188,21 +199,31 @@ void timer_logger_callback(rcl_timer_t *timer, int64_t last_call_time) {
     (void) last_call_time;
     if (!timer)
         return;
-    // 尝试从队列取出所有消息
+
+    // 尝试从队列取出消息
     if (!xLogQueue.empty()) {
         char *pMsg = xLogQueue.front();
-        if (pMsg) {
-            // 填充 ROS 消息并发布
+        if (pMsg != nullptr) {
+            // 额外检查确保pMsg是有效指针
+            // 填充 ROS 消息并发布，增加安全检查
             size_t len = strlen(pMsg);
+            // 确保不超过缓冲区容量
             if (len >= msgString.data.capacity) {
                 len = msgString.data.capacity - 1;
             }
+            // 安全复制
             memcpy(msgString.data.data, pMsg, len);
-            msgString.data.data[len] = '\0';
+            msgString.data.data[len] = '\0';  // 确保字符串正确终止
             msgString.data.size = len + 1;
+
+            // 发布消息
             rcl_publish(&publisher_logger, &msgString, nullptr);
-            // 释放连续内存，把字符串和后续内容都删掉
+
+            // 释放内存，确保先操作完再弹出队列
             vPortFree(pMsg);
+            xLogQueue.pop();
+        } else {
+            // 如果队列中的指针为NULL，直接弹出
             xLogQueue.pop();
         }
     }
@@ -215,8 +236,8 @@ void timer_send_status_callback(rcl_timer_t *timer, int64_t last_call_time) {
         // 发送velocity 填充last_launch_time
         static TickType_t last_send_tick = velocity_meter_result.record_time;
         if (last_send_tick != velocity_meter_result.record_time) {
-            char buf[20];
-            snprintf(buf, 20, "velocity: %.2f", velocity_meter_result.velocity);
+            char buf[30]; // 增加缓冲区大小，以防浮点数打印过长
+            snprintf(buf, sizeof(buf), "velocity: %.2f", velocity_meter_result.velocity);
             dart_mcu_log(buf);
             last_send_tick = velocity_meter_result.record_time;
             msgDartStatus.last_launch_time = rmw_uros_epoch_millis();
@@ -301,8 +322,7 @@ bool create_entities() {
     RCCHECK(rclc_executor_init(&executor, &support.context, 6, &allocator));
     RCCHECK(rclc_executor_add_timer(&executor, &timer_log_update));
     RCCHECK(rclc_executor_add_timer(&executor, &timer_status_update));
-
-    RCSOFTCHECK(rclc_executor_add_subscription(&executor, &subscriber_buzzer, &msgInt64,
+    RCSOFTCHECK(rclc_executor_add_subscription(&executor, &subscriber_buzzer, &msgInt32,
                                                &subscription_buzzer_callback,
                                                ON_NEW_DATA));
     RCSOFTCHECK(rclc_executor_add_subscription(&executor, &subscriber_protocol, &msgDartProtocols,
@@ -436,15 +456,14 @@ void subscription_buzzer_callback(const void *msgin) {
 state_machine::UpsideState state_machine::upside_state = state_machine::UpsideState::Idle;
 
 void subscription_protocol_setting_callback(const void *msgin) {
-    const std_msgs__msg__Int32 *msg = (const std_msgs__msg__Int32 *) msgin;
+    const dart_msgs__msg__DartLauncherParams *msg = (const dart_msgs__msg__DartLauncherParams *) msgin;
 
     if (msgin != NULL) {
     }
 }
 
 void subscription_parameter_setting_callback(const void *msgin) {
-    // const auto *msg = (const dart_msgs__msg__DartLauncherParams *) msgin;
-    const auto *msg = (const dart_msgs__msg__GreenLight *) msgin;
+    const auto *msg = (const dart_msgs__msg__DartLauncherParams *) msgin;
     if (msgin != NULL) {
     }
 }
@@ -462,9 +481,12 @@ void dart_mcu_log(const char *msg) {
     if (xLogQueue.size() > 10) {
         return;
     }
-    char *pMsg = (char *) pvPortMalloc(strlen(msg) + 1);
+    size_t msg_len = strlen(msg);
+    char *pMsg = (char *) pvPortMalloc(msg_len + 1);
     if (pMsg != NULL) {
-        strcpy(pMsg, msg);
+        // 使用安全的字符串复制，确保不会溢出
+        strncpy(pMsg, msg, msg_len);
+        pMsg[msg_len] = '\0';  // 确保字符串正确终止
         // 发送到队列
         xLogQueue.push(pMsg);
     }

@@ -552,15 +552,17 @@ do{                        \
     bool updateAutoAim(dart_msgs__msg__DartLauncherParams &msgDartParams_) {
         static uint8_t no_autoaim_count = 0;
         static TickType_t last_autoaim_update_tick = 0;
-        if (xTaskGetTickCount() - last_autoaim_update_tick > 100) { // 10 fps
+        if (xTaskGetTickCount() - last_autoaim_update_tick > 33) { // 30 fps
             last_autoaim_update_tick = xTaskGetTickCount();
             if (msgDartParams_.auto_aim_enabled) {
                 if (msgGreenLight.is_detected
                     && xTaskGetTickCount() - last_greenlight_update_time < 400) {
                     // TODO: 引入非线性PID Error, 加快自瞄收敛速度
-                    if (abs(msgGreenLight.location.x - msgDartParams_.target_auto_aim_x_axis) > 5)
+                    if (abs(msgGreenLight.location.x - msgDartParams_.target_auto_aim_x_axis) > 2)
                         msgDartStatus.primary_yaw_offset = motor_controller::AutoAimController.update(
                                 msgDartParams_.target_auto_aim_x_axis - msgGreenLight.location.x);
+                    else
+                        msgDartStatus.primary_yaw_offset = motor_controller::AutoAimController.update(0);
                     no_autoaim_count = 0;
                     static char buf[30];
                     snprintf(buf, sizeof(buf), "Autoaim updated to %d", msgDartStatus.primary_yaw_offset);
@@ -571,7 +573,7 @@ do{                        \
                     return true;
                 } else {
                     no_autoaim_count++;
-                    if (no_autoaim_count > 5) {
+                    if (no_autoaim_count > 30) {
                         motor_controller::MotorYawLSController.target_angle_with_rounds_ =
                                 msgDartParams_.primary_yaw;
                         msgDartStatus.primary_yaw_offset = 0;
