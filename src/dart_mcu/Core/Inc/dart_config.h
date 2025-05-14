@@ -69,7 +69,7 @@
 #define CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD 5000
 
 // Publisher定义
-#define LOG_BUF_LEN 50
+#define LOG_BUF_LEN 128
 // 队列长度
 #define LOG_QUEUE_LEN 10
 

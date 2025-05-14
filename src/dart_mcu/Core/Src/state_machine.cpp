@@ -622,9 +622,7 @@ do{                        \
     {
         static uint8_t no_autoaim_count = 0;
         static TickType_t last_autoaim_update_tick = 0;
-        if (xTaskGetTickCount() - last_autoaim_update_tick > 100)
-        {
-            // 10 fps
+        if (xTaskGetTickCount() - last_autoaim_update_tick > 33) { // 30 fps
             last_autoaim_update_tick = xTaskGetTickCount();
             if (msgDartParams_.auto_aim_enabled)
             {
@@ -632,25 +630,11 @@ do{                        \
                     && xTaskGetTickCount() - last_greenlight_update_time < 400)
                 {
                     // TODO: 引入非线性PID Error, 加快自瞄收敛速度
-                    int error = msgDartParams_.target_auto_aim_x_axis - msgGreenLight.location.x;
-                    // if (error >= 220)
-                    // {
-                    //     msgDartStatus.primary_yaw_offset = motor_controller::AutoAimController.update(
-                    //         sqrt(abs(error)));
-                    // }
-                    // else if (error <= -220)
-                    // {
-                    //     msgDartStatus.primary_yaw_offset = motor_controller::AutoAimController.update(
-                    //         -sqrt(abs(error)));
-                    // }
-                    if (abs(error) > 20)
-                    {
-                        msgDartStatus.primary_yaw_offset = motor_controller::AutoAimController.update(error);
-                    }else if (abs(error) > 5)
-                    {
-                        msgDartStatus.primary_yaw_offset = motor_controller::AutoAimController.update(0.5 * error * sqrt(abs(error)));
-                    }
-
+                    if (abs(msgGreenLight.location.x - msgDartParams_.target_auto_aim_x_axis) > 2)
+                        msgDartStatus.primary_yaw_offset = motor_controller::AutoAimController.update(
+                                msgDartParams_.target_auto_aim_x_axis - msgGreenLight.location.x);
+                    else
+                        msgDartStatus.primary_yaw_offset = motor_controller::AutoAimController.update(0);
                     no_autoaim_count = 0;
                     static char buf[30];
                     snprintf(buf, sizeof(buf), "Autoaim updated to %d", msgDartStatus.primary_yaw_offset);
@@ -663,8 +647,7 @@ do{                        \
                 else
                 {
                     no_autoaim_count++;
-                    if (no_autoaim_count > 5)
-                    {
+                    if (no_autoaim_count > 30) {
                         motor_controller::MotorYawLSController.target_angle_with_rounds_ =
                             msgDartParams_.primary_yaw;
                         msgDartStatus.primary_yaw_offset = 0;
