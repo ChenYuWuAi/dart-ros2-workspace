@@ -57,6 +57,7 @@
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
+
 void MX_FREERTOS_Init(void);
 /* USER CODE BEGIN PFP */
 /* USER CODE END PFP */
@@ -70,19 +71,18 @@ void MX_FREERTOS_Init(void);
   * @brief  The application entry point.
   * @retval int
   */
-int main(void)
-{
+int main(void) {
 
-  /* USER CODE BEGIN 1 */
+    /* USER CODE BEGIN 1 */
 
-  /* USER CODE END 1 */
+    /* USER CODE END 1 */
 
-  /* MCU Configuration--------------------------------------------------------*/
+    /* MCU Configuration--------------------------------------------------------*/
 
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+    /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+    HAL_Init();
 
-  /* USER CODE BEGIN Init */
+    /* USER CODE BEGIN Init */
     RCC_OscInitTypeDef RCC_OscInitStruct = {0};
     RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
     RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_SYSCLK;
@@ -90,27 +90,27 @@ int main(void)
     if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK) {
         Error_Handler();
     }
-  /* USER CODE END Init */
+    /* USER CODE END Init */
 
-  /* Configure the system clock */
-  SystemClock_Config();
+    /* Configure the system clock */
+    SystemClock_Config();
 
-  /* USER CODE BEGIN SysInit */
-  /* USER CODE END SysInit */
+    /* USER CODE BEGIN SysInit */
+    /* USER CODE END SysInit */
 
-  /* Initialize all configured peripherals */
-  MX_GPIO_Init();
-  MX_DMA_Init();
-  MX_TIM12_Init();
-  MX_TIM6_Init();
-  MX_CAN1_Init();
-  MX_CAN2_Init();
-  MX_TIM4_Init();
-  MX_TIM5_Init();
-  MX_USART1_UART_Init();
-  MX_USART3_UART_Init();
-  MX_TIM8_Init();
-  /* USER CODE BEGIN 2 */
+    /* Initialize all configured peripherals */
+    MX_GPIO_Init();
+    MX_DMA_Init();
+    MX_TIM12_Init();
+    MX_TIM6_Init();
+    MX_CAN1_Init();
+    MX_CAN2_Init();
+    MX_TIM4_Init();
+    MX_TIM5_Init();
+    MX_USART1_UART_Init();
+    MX_USART3_UART_Init();
+    MX_TIM8_Init();
+    /* USER CODE BEGIN 2 */
     CAN_FilterTypeDef sFilterConfig;
 
     sFilterConfig.FilterBank = 0;
@@ -131,110 +131,135 @@ int main(void)
     HAL_CAN_ConfigFilter(&hcan2, &sFilterConfig);
     HAL_CAN_Start(&hcan2);
     HAL_CAN_ActivateNotification(&hcan2, CAN_IT_RX_FIFO0_MSG_PENDING);
+    HAL_UARTEx_ReceiveToIdle_DMA(REFEREE_UART_HANDLE, REFEREE_UART_RXBUFFER[0], REFEREE_UART_BUFFER_LENGTH);
+    HAL_UARTEx_ReceiveToIdle_DMA(RC_UART_HANDLE, RC_UART_RXBUFFER, RC_UART_BUFFER_LENGTH);
+    /* USER CODE END 2 */
 
+    /* Init scheduler */
+    osKernelInitialize();
 
-    HAL_UARTEx_ReceiveToIdle_DMA(&huart3, judge_rx_buffer[0], UART3_MAX_RECEIVE_BUFFER_LENGTH);
-    HAL_UARTEx_ReceiveToIdle_DMA(&huart1, uart1RecBuffer, UART1_MAX_RECEIVE_BUFFER_LENGTH);
-  /* USER CODE END 2 */
+    /* Call init function for freertos objects (in cmsis_os2.c) */
+    MX_FREERTOS_Init();
 
-  /* Init scheduler */
-  osKernelInitialize();
+    /* Start scheduler */
+    osKernelStart();
 
-  /* Call init function for freertos objects (in cmsis_os2.c) */
-  MX_FREERTOS_Init();
+    /* We should never get here as control is now taken by the scheduler */
 
-  /* Start scheduler */
-  osKernelStart();
-
-  /* We should never get here as control is now taken by the scheduler */
-
-  /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
+    /* Infinite loop */
+    /* USER CODE BEGIN WHILE */
     while (1) {
-    /* USER CODE END WHILE */
+        /* USER CODE END WHILE */
 
-    /* USER CODE BEGIN 3 */
+        /* USER CODE BEGIN 3 */
     }
-  /* USER CODE END 3 */
+    /* USER CODE END 3 */
 }
 
 /**
   * @brief System Clock Configuration
   * @retval None
   */
-void SystemClock_Config(void)
-{
-  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
-  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+void SystemClock_Config(void) {
+    RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+    RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
-  /** Configure the main internal regulator output voltage
-  */
-  __HAL_RCC_PWR_CLK_ENABLE();
-  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
+    /** Configure the main internal regulator output voltage
+    */
+    __HAL_RCC_PWR_CLK_ENABLE();
+    __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
-  /** Initializes the RCC Oscillators according to the specified parameters
-  * in the RCC_OscInitTypeDef structure.
-  */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
-  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-  RCC_OscInitStruct.PLL.PLLM = 6;
-  RCC_OscInitStruct.PLL.PLLN = 168;
-  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
-  RCC_OscInitStruct.PLL.PLLQ = 7;
-  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
-  {
-    Error_Handler();
-  }
+    /** Initializes the RCC Oscillators according to the specified parameters
+    * in the RCC_OscInitTypeDef structure.
+    */
+    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+    RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+    RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+    RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+    RCC_OscInitStruct.PLL.PLLM = 6;
+    RCC_OscInitStruct.PLL.PLLN = 168;
+    RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
+    RCC_OscInitStruct.PLL.PLLQ = 7;
+    if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
+        Error_Handler();
+    }
 
-  /** Initializes the CPU, AHB and APB buses clocks
-  */
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
-                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
+    /** Initializes the CPU, AHB and APB buses clocks
+    */
+    RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK
+                                  | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
+    RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+    RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+    RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
+    RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK)
-  {
-    Error_Handler();
-  }
+    if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK) {
+        Error_Handler();
+    }
 }
 
 /* USER CODE BEGIN 4 */
+// 全局变量用于裁判系统的双缓冲选择
+static volatile uint8_t g_judge_decode_memory = MEMORY0;
+
 /*---------------------------------function of interrupt begin------------------------------------*/
 // 遥控&裁判系统解码
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size) {
-    if (huart == &huart1 && huart->RxEventType == HAL_UART_RXEVENT_IDLE
-            ) {
-        if (Size == 18U) {
-            memcpy(RC_rx_buffer, uart1RecBuffer, Size);
+      if (huart == RC_UART_HANDLE && huart->RxEventType == HAL_UART_RXEVENT_IDLE) {
+        // 确保数据大小正确且不超过缓冲区大小
+        if (Size == RC_FRAME_LEN && Size <= RC_UART_BUFFER_LENGTH) {
+            // 安全复制数据
+            memcpy(RC_rx_buffer, RC_UART_RXBUFFER, Size);
             DT7_Decode();
         }
 
-        memset(uart1RecBuffer, 0, UART1_MAX_RECEIVE_BUFFER_LENGTH);
-        HAL_UARTEx_ReceiveToIdle_DMA(&huart1, uart1RecBuffer, UART1_MAX_RECEIVE_BUFFER_LENGTH);
-    } else if (huart == &huart3 && huart->RxEventType == HAL_UART_RXEVENT_IDLE
-            ) {
-        // 双缓�?
-        static uint8_t decode_memory_ = MEMORY0;
-
-        HAL_UARTEx_ReceiveToIdle_DMA(&huart3, judge_rx_buffer[(decode_memory_ + 1) % 2],
-                                     UART3_MAX_RECEIVE_BUFFER_LENGTH);
-        RefereeReceive(Size, judge_rx_buffer[decode_memory_]
-        );
-        decode_memory_ = (decode_memory_ + 1) % 2;
+        // 清空缓冲区并重启DMA接收
+        memset(RC_UART_RXBUFFER, 0, RC_UART_BUFFER_LENGTH);
+        HAL_UARTEx_ReceiveToIdle_DMA(RC_UART_HANDLE, RC_UART_RXBUFFER, RC_UART_BUFFER_LENGTH);
+    } else if (huart == REFEREE_UART_HANDLE && huart->RxEventType == HAL_UART_RXEVENT_IDLE) {        // 确保接收的数据大小不超过缓冲区大小
+        if (Size > 0 && Size <= REFEREE_UART_BUFFER_LENGTH) {
+            // 使用全局变量，并在一次操作中获取当前值，避免竞态条件
+            uint8_t current_buffer = g_judge_decode_memory;
+            uint8_t next_buffer = (current_buffer + 1) % 2;
+            
+            // 先设置下一次接收
+            HAL_UARTEx_ReceiveToIdle_DMA(REFEREE_UART_HANDLE, REFEREE_UART_RXBUFFER[next_buffer], REFEREE_UART_BUFFER_LENGTH);
+            
+            // 处理当前接收到的数据
+            RefereeReceive(Size, REFEREE_UART_RXBUFFER[current_buffer]);
+            
+            // 切换缓冲区
+            g_judge_decode_memory = next_buffer;
+        } else {
+            // 接收数据过大或无效，重置接收
+            HAL_UARTEx_ReceiveToIdle_DMA(REFEREE_UART_HANDLE, REFEREE_UART_RXBUFFER[g_judge_decode_memory], REFEREE_UART_BUFFER_LENGTH);
+        }
     }
 }
 
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
-    if (huart == &huart1 || huart == &huart3) {
+    if (huart == RC_UART_HANDLE || huart == REFEREE_UART_HANDLE) {
+        // 清除全部错误标志
+        __HAL_UART_CLEAR_FLAG(huart, UART_FLAG_ORE | UART_FLAG_NE | UART_FLAG_FE | UART_FLAG_PE);
         __HAL_UART_CLEAR_FLAG(huart, UART_FLAG_RXNE);
         __HAL_UART_CLEAR_OREFLAG(huart);
+        
+        // 重置DMA
+        HAL_UART_AbortReceive(huart);
+        // 重新启动DMA接收
+        if (huart == RC_UART_HANDLE) {
+            memset(RC_UART_RXBUFFER, 0, RC_UART_BUFFER_LENGTH);
+            HAL_UARTEx_ReceiveToIdle_DMA(RC_UART_HANDLE, RC_UART_RXBUFFER, RC_UART_BUFFER_LENGTH);
+        } else if (huart == REFEREE_UART_HANDLE) {
+            // 使用全局变量，确保与RxEventCallback使用相同的缓冲区
+            HAL_UARTEx_ReceiveToIdle_DMA(REFEREE_UART_HANDLE, REFEREE_UART_RXBUFFER[g_judge_decode_memory], REFEREE_UART_BUFFER_LENGTH);
+        }
+        
+        // 重新启用中断
         __HAL_UART_ENABLE_IT(huart, UART_IT_RXNE);
         __HAL_UART_ENABLE_IT(huart, UART_IT_ERR);
+        
+        // 清除错误状态
         huart->ErrorCode = HAL_UART_ERROR_NONE;
         huart->gState = HAL_UART_STATE_READY;
         huart->RxState = HAL_UART_STATE_READY;
@@ -246,8 +271,7 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
  */
 
 void HAL_CAN_ErrorCallback(CAN_HandleTypeDef *hcan) {
-    uint32_t err = HAL_CAN_GetError(hcan);  // 获取错误码 :contentReference[oaicite:6]{index=6}
-
+    uint32_t err = HAL_CAN_GetError(hcan);  // 获取错误码
     // 检测到 Bus-Off 错误
     if (err & HAL_CAN_ERROR_BOF) {
         reboot_can(hcan);
@@ -317,35 +341,33 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim) {
   * @param  htim : TIM handle
   * @retval None
   */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-  /* USER CODE BEGIN Callback 0 */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+    /* USER CODE BEGIN Callback 0 */
 
-  /* USER CODE END Callback 0 */
-  if (htim->Instance == TIM2) {
-    HAL_IncTick();
-  }
-  /* USER CODE BEGIN Callback 1 */
+    /* USER CODE END Callback 0 */
+    if (htim->Instance == TIM2) {
+        HAL_IncTick();
+    }
+        /* USER CODE BEGIN Callback 1 */
     else if (htim->Instance == TIM6) {
         SoundEffectManager::timer_callback(&soundEffectManager);
     } else if (htim->Instance == TIM8) {
         meter::velocity_meter.onUpdate(htim);
     }
-  /* USER CODE END Callback 1 */
+    /* USER CODE END Callback 1 */
 }
 
 /**
   * @brief  This function is executed in case of error occurrence.
   * @retval None
   */
-void Error_Handler(void)
-{
-  /* USER CODE BEGIN Error_Handler_Debug */
+void Error_Handler(void) {
+    /* USER CODE BEGIN Error_Handler_Debug */
     /* User can add his own implementation to report the HAL error return state */
-    __disable_irq();
     while (1) {
+        // Restart the system
     }
-  /* USER CODE END Error_Handler_Debug */
+    /* USER CODE END Error_Handler_Debug */
 }
 
 #ifdef  USE_FULL_ASSERT
