@@ -7,11 +7,17 @@ void NodeDartLauncherDetector::camera_thread(std::shared_ptr<CameraDriver> camer
 {
     RCLCPP_INFO(this->get_logger(), "Starting thread for %s camera...", camera_name.c_str());
 
-    int width = this->get_parameter(camera_name + ".image_width").as_int();
-    int height = this->get_parameter(camera_name + ".image_height").as_int();
-    RCLCPP_DEBUG(this->get_logger(), "%s camera resolution: %dx%d", camera_name.c_str(), width, height);
+    int width = this->has_parameter(camera_name + ".image_width") ? this->get_parameter(camera_name + ".image_width").as_int() : 1280;
+    int height = this->has_parameter(camera_name + ".image_height") ? this->get_parameter(camera_name + ".image_height").as_int() : 1024;
+    int width_resized = this->has_parameter(camera_name + ".image_resized_width") ? this->get_parameter(camera_name + ".image_resized_width").as_int() : 640;
+    int height_resized = this->has_parameter(camera_name + ".image_resized_height") ? this->get_parameter(camera_name + ".image_resized_height").as_int() : 512;
+    bool resize = this->has_parameter(camera_name + ".image_resize_enable") ? this->get_parameter(camera_name + ".image_resize_enable").as_bool() : false;
+
+    RCLCPP_INFO(this->get_logger(), "Camera %s runtime parameters: %dx%d, resized: %dx%d, resize_enable: %s",
+                camera_name.c_str(), width, height, width_resized, height_resized, resize ? "true" : "false");
 
     cv::Mat image(height, width, CV_8UC3);
+    cv::Mat image_resized(height_resized, width_resized, CV_8UC3);
     if (is_qr_detection)
     {
         // Activate publishers
@@ -20,6 +26,13 @@ void NodeDartLauncherDetector::camera_thread(std::shared_ptr<CameraDriver> camer
 
         std::string last_detected_qr_code_str;
         int reset_last_detected_qr_code_counter = 0;
+
+        double target_fps = this->has_parameter(camera_name + ".camera_params.FrameRate")
+                                ? static_cast<double>(this->get_parameter(camera_name + ".camera_params.FrameRate").as_int())
+                                : 30.0;
+        double target_sleep_time_ms = 1000.0 / target_fps;
+        RCLCPP_INFO(this->get_logger(), "Target FPS: %.2f, Target sleep time: %.2f ms", target_fps, target_sleep_time_ms);
+
         while (running_ && rclcpp::ok())
         {
             if (!camera->read(image))
@@ -29,6 +42,7 @@ void NodeDartLauncherDetector::camera_thread(std::shared_ptr<CameraDriver> camer
                 continue;
             }
             RCLCPP_DEBUG(this->get_logger(), "Image read successfully from %s camera", camera_name.c_str());
+            auto start_time = std::chrono::steady_clock::now();
 
             auto qr_codes = qr_detector_.detect(image);
             if (!qr_codes.empty() && qr_codes[0] != last_detected_qr_code_str)
@@ -73,7 +87,18 @@ void NodeDartLauncherDetector::camera_thread(std::shared_ptr<CameraDriver> camer
             auto image_msg = cv_bridge::CvImage(header, "bgr8", image).toCompressedImageMsg();
 
             qr_image_publisher_->publish(*image_msg);
-            std::this_thread::sleep_for(16ms);
+            auto end_time = std::chrono::steady_clock::now();
+            auto processing_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+            auto sleep_time = target_sleep_time_ms - processing_time;
+            if (sleep_time > 0)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<int>(sleep_time)));
+            }
+            else
+            {
+                RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(),
+                                     10000, "QR Detection processing time exceeded target frame time: %ld ms", processing_time);
+            }
         }
         qr_image_publisher_->on_deactivate();
         qr_detect_publisher_->on_deactivate();
@@ -81,10 +106,25 @@ void NodeDartLauncherDetector::camera_thread(std::shared_ptr<CameraDriver> camer
     else
     {
 
+        double alpha = this->has_parameter("greenlight.lowpass_filter.alpha")
+                           ? this->get_parameter("greenlight.lowpass_filter.alpha").as_double()
+                           : 0.5;
+
+        RCLCPP_INFO(this->get_logger(), "Runtime using lowpass filter with alpha: %.2f", alpha);
+
+        bool previous_detection = false;
         greenlight_publisher_->on_activate();
         greenlight_image_publisher_->on_activate();
+        double target_fps = this->has_parameter(camera_name + ".camera_params.FPS")
+                                ? static_cast<double>(this->get_parameter(camera_name + ".camera_params.FPS").as_int())
+                                : 30.0;
+        double target_sleep_time_ms = 1000.0 / target_fps;
+
+        RCLCPP_INFO(this->get_logger(), "Target FPS: %.2f, Target sleep time: %.2f ms", target_fps, target_sleep_time_ms);
+
         while (running_ && rclcpp::ok())
         {
+
             try
             {
                 if (!camera->read(image))
@@ -102,35 +142,79 @@ void NodeDartLauncherDetector::camera_thread(std::shared_ptr<CameraDriver> camer
             }
 
             RCLCPP_DEBUG(this->get_logger(), "Image read successfully from %s camera", camera_name.c_str());
+            auto start_time = std::chrono::steady_clock::now();
 
             bool is_detected = false;
             double x = 0, y = 0;
             if (image.empty())
                 continue;
-            cv::Mat resultImg = perform_greenlight_detection(image, is_detected, x, y);
+
+            if (resize)
+            {
+                cv::resize(image, image_resized, cv::Size(width_resized, height_resized));
+                if (image_resized.empty())
+                {
+                    RCLCPP_WARN(this->get_logger(), "Resized image is empty");
+                    continue;
+                }
+                perform_greenlight_detection(image_resized, is_detected, x, y);
+            }
+            else
+                perform_greenlight_detection(image, is_detected, x, y);
+
             if (is_detected)
             {
-                RCLCPP_INFO(this->get_logger(), "%s camera detected green light at (%.2f, %.2f)", camera_name.c_str(), x, y);
+                RCLCPP_DEBUG(this->get_logger(), "%s camera detected green light at (%.2f, %.2f)", camera_name.c_str(), x, y);
             }
             else
             {
                 RCLCPP_DEBUG(this->get_logger(), "No green light detected in current frame of %s camera", camera_name.c_str());
             }
 
+            static double filtered_x = 0.0, filtered_y = 0.0;
+
+            if (is_detected)
+            {
+                if (!previous_detection)
+                {
+                    // Clear filtered values on rising edge of detection
+                    filtered_x = x;
+                    filtered_y = y;
+                }
+                filtered_x = alpha * x + (1 - alpha) * filtered_x;
+                filtered_y = alpha * y + (1 - alpha) * filtered_y;
+            }
+
+            previous_detection = is_detected;
+
             auto message = dart_msgs::msg::GreenLight();
             message.header.stamp = this->get_clock()->now();
             message.header.frame_id = camera_name;
             message.is_detected = is_detected;
-            message.location.x = x;
-            message.location.y = y;
+            message.location.x = filtered_x;
+            message.location.y = filtered_y;
             message.location.z = 0.0;
             greenlight_publisher_->publish(message);
 
             std_msgs::msg::Header header;
             header.stamp = this->now();
 
-            auto image_msg = cv_bridge::CvImage(header, "bgr8", resultImg).toCompressedImageMsg();
+            auto image_msg = cv_bridge::CvImage(header, "bgr8", resize ? image_resized : image).toCompressedImageMsg();
             greenlight_image_publisher_->publish(*image_msg);
+
+            auto end_time = std::chrono::steady_clock::now();
+            auto processing_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+
+            auto sleep_time = target_sleep_time_ms - processing_time;
+            if (sleep_time > 0)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<int>(sleep_time)));
+            }
+            else
+            {
+                RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(),
+                                     10000, "Greenlight processing time exceeded target frame time: %ld ms", processing_time);
+            }
         }
 
         greenlight_publisher_->on_deactivate();
@@ -139,8 +223,13 @@ void NodeDartLauncherDetector::camera_thread(std::shared_ptr<CameraDriver> camer
     RCLCPP_INFO(this->get_logger(), "Thread for %s camera stopped.", camera_name.c_str());
 }
 
-cv::Mat NodeDartLauncherDetector::perform_greenlight_detection(cv::Mat &frame, bool &is_detected, double &x, double &y)
+void NodeDartLauncherDetector::perform_greenlight_detection(cv::Mat &frame, bool &is_detected, double &x, double &y)
 {
+    if (frame.empty())
+    {
+        RCLCPP_WARN(this->get_logger(), "Frame is empty, skipping detection");
+        return;
+    }
     if (greenlight_detector_->detect(frame))
     {
         is_detected = true;
@@ -154,7 +243,7 @@ cv::Mat NodeDartLauncherDetector::perform_greenlight_detection(cv::Mat &frame, b
     {
         RCLCPP_DEBUG(this->get_logger(), "No green light detected in the current frame");
     }
-    return greenlight_detector_->drawRaw();
+    greenlight_detector_->drawRaw(frame);
 }
 
 void NodeDartLauncherDetector::on_parameter_event(const rclcpp::Parameter &param)

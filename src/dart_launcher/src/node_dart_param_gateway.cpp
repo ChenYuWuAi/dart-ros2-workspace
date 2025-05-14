@@ -193,11 +193,16 @@ void NodeDartParamGateway::daemon_thread_func()
         switch (current_state)
         {
         case SyncState::IDLE:
+            if (!mcu_online_)
+            {
+                RCLCPP_WARN_THROTTLE(get_logger(), *this->get_clock(), 10000, "MCU node is offline, waiting for it to come online...");
+                break;
+            }
             // 判断之前，屏蔽某一些变量
             if ((dart_status.protocols.last_param_update_time == 0 || dart_status.params.last_param_update_time == 0) && dart_status.header.stamp.sec != 0)
             {
                 // 如果比赛状态内，则拒绝更新参数
-                if (dart_status.game_progress >= 2)
+                if (dart_status.game_progress >= 2 && block_param_update_ingame_)
                 {
                     RCLCPP_WARN(get_logger(), "Game in progress, ignoring parameter update.");
                     break;
@@ -410,6 +415,18 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
     {
         RCLCPP_ERROR(get_logger(), "Parameter 'param_database_path' not set.");
         return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
+    }
+
+    if (this->has_parameter("block_param_update_ingame"))
+    {
+        block_param_update_ingame_ = this->get_parameter("block_param_update_ingame").as_bool();
+        RCLCPP_INFO(get_logger(), "block_param_update_ingame: %s", block_param_update_ingame_ ? "true" : "false");
+    }
+    else
+    {
+        this->declare_parameter("block_param_update_ingame", false);
+        block_param_update_ingame_ = false;
+        RCLCPP_WARN(get_logger(), "block_param_update_ingame parameter not set, defaulting to false.");
     }
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }

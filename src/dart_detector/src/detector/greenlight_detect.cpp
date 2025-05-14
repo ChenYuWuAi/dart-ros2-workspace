@@ -134,10 +134,9 @@ void TopArmorDetect::preprocess(cv::Mat &frame, cv::Mat &result)
  */
 bool TopArmorDetect::detect(cv::Mat &frame)
 {
-    if(frame.empty())
+    if (frame.empty())
         return false;
     _circles.clear();
-    _rawImg = frame.clone();
     cv::Mat result;
     preprocess(frame, result);
     try
@@ -185,18 +184,15 @@ cv::Mat TopArmorDetect::debugDraw()
     return draw;
 }
 
-cv::Mat TopArmorDetect::drawRaw()
+void TopArmorDetect::drawRaw(cv::Mat &draw)
 {
-    cv::Mat draw = _rawImg.clone();
-
     cv::circle(draw, _center, 3, cv::Scalar(0, 0, 255), -1);
     cv::circle(draw, _center, _radius, cv::Scalar(0, 0, 255), 3);
     static char buf[50];
     sprintf(buf, "(%.1f, %.1f)", _center.x, _center.y);
     cv::putText(draw, std::string(buf), cv::Point(_center.x, _center.y + 2 * _radius), cv::FONT_HERSHEY_SIMPLEX, 2, cv::Scalar(0, 0, 255), 2);
-
-    return draw;
 }
+
 void TopArmorDetect::getResult(cv::Point2f &center)
 {
     center = _center;

@@ -21,7 +21,7 @@ public:
 
     cv::Mat drawResult();
     cv::Mat debugDraw();
-    cv::Mat drawRaw();
+    void drawRaw(cv::Mat &draw);
     void getResult(cv::Point2f &center);
 
 private:
@@ -50,7 +50,6 @@ private:
     float _radius;
     std::vector<cv::Vec3f> _circles;
     cv::Mat _preprocessResult;
-    cv::Mat _rawImg;
 };
 
 #endif // DETECT_H

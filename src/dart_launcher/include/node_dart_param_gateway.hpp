@@ -84,6 +84,8 @@ private:
     rclcpp::Time last_status_time_;
     bool mcu_online_;
 
+    bool block_param_update_ingame_;
+
     std::thread daemon_thread_;
     bool daemon_running_;
 };

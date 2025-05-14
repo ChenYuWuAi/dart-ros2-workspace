@@ -35,30 +35,6 @@ std::vector<std::string> QRCodeDetectorWechat::detect(cv::Mat &inputImage)
         return results; // 返回空结果
     }
 
-    // 转换为灰度图
-    // cv::Mat gray, filtered, claheImg;
-    // cv::cvtColor(inputImage, gray, cv::COLOR_BGR2GRAY);
-
-    // // 1.1 双边滤波保边去噪
-    // cv::bilateralFilter(gray, filtered, 9, 75, 75);
-
-    // // 在二值化之前，先做一次中值滤波去小颗粒噪声
-    // cv::medianBlur(filtered, claheImg, 5);
-
-    // // 1.3 自适应阈值二值化
-    // cv::adaptiveThreshold(
-    //     claheImg, claheImg, 255,
-    //     cv::ADAPTIVE_THRESH_GAUSSIAN_C,
-    //     cv::THRESH_BINARY, binary_threshold, 5);
-
-    // // 形态学开运算去除噪点
-    // cv::Mat opened;
-    // cv::morphologyEx(claheImg, opened, cv::MORPH_OPEN,
-    //                  cv::getStructuringElement(cv::MORPH_RECT, {3, 3}),
-    //                  cv::Point(-1, -1), 1);
-
-    // inputImage = opened.clone();
-
     // 使用WeChat QRCode检测器
     std::vector<cv::Mat> points;
     try
