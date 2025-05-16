@@ -47,6 +47,8 @@ public:
         for (const auto &node_name : nodes_)
         {
             RCLCPP_INFO(get_logger(), "Node to monitor registered: %s", node_name.c_str());
+            node_states_[node_name] = lifecycle_msgs::msg::State::PRIMARY_STATE_UNKNOWN;
+            offline_count_[node_name] = 0;
         }
 
         dart_buzzer_cmd_pub_ = this->create_publisher<std_msgs::msg::Int32>(
@@ -58,7 +60,7 @@ public:
 
         // Periodic monitoring of node state
         monitor_timer_ = create_wall_timer(
-            10s, std::bind(&LifecycleManager::monitor_nodes, this));
+            3s, std::bind(&LifecycleManager::monitor_nodes, this));
 
         // Shutdown service
         shutdown_srv_ = this->create_service<Trigger>(
@@ -67,8 +69,11 @@ public:
     }
 
 private:
+    bool having_shutdown = false;
     void shutdown_all()
     {
+        if (having_shutdown)
+            return;
         for (const auto &node_name : nodes_)
         {
             try
@@ -91,6 +96,7 @@ private:
                 continue;
             }
         }
+        having_shutdown = true;
     }
 
     void shutdown_callback(
@@ -123,10 +129,6 @@ private:
     void startup_sequence()
     {
         startup_timer_->cancel();
-        for (auto &p : nodes_)
-        {
-            node_states_[p] = lifecycle_msgs::msg::State::PRIMARY_STATE_UNKNOWN;
-        }
         for (auto &p : nodes_)
         {
             if (!change_each(p, lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE))
@@ -179,48 +181,53 @@ private:
 
     void error_handler()
     {
+        monitor_timer_->cancel();
+        startup_timer_->cancel();
         RCLCPP_ERROR(get_logger(), "Error occurred, shutting down.");
         auto buzzer_msg = std_msgs::msg::Int32();
         buzzer_msg.data = BuzzerSound::BuzzerError;
         dart_buzzer_cmd_pub_->publish(buzzer_msg); // error sound
-        // TODO: cleanup所有节点，并重启ros2服务
+        // Shutdown all nodes
+        shutdown_all();
+        std::thread([&]()
+                    {
+            std::this_thread::sleep_for(5s);
+            RCLCPP_INFO(get_logger(), "Restarting dart_ros2_run.service");
+            system("sudo systemctl restart dart_ros2_run.service"); 
+            exit(0); })
+            .detach();
     }
 
     void monitor_nodes()
     {
-        static uint8_t offline_count = 0;
-
         for (auto &p : nodes_)
         {
             auto &node_name = p;
+            auto &count = offline_count_[node_name];
             auto get_state_client = sub_node->create_client<GetState>(node_name + "/get_state");
 
-            // Check if the node's get_state service is available
-            if (!get_state_client->wait_for_service(5s))
+            if (!get_state_client->wait_for_service(3s))
             {
-                RCLCPP_WARN(get_logger(), "%s get_state unavailable.", node_name.c_str());
-                offline_count++;
-                if (offline_count > 3)
+                count++;
+                RCLCPP_WARN(get_logger(), "%s get_state unavailable. Offline count: %d", node_name.c_str(), count);
+                if (count > 3)
                 {
                     RCLCPP_ERROR(get_logger(), "%s is offline. Triggering restart error handler", node_name.c_str());
                     error_handler();
                 }
-                node_states_[node_name] = lifecycle_msgs::msg::State::PRIMARY_STATE_UNKNOWN; // Cache as unknown
+                node_states_[node_name] = lifecycle_msgs::msg::State::PRIMARY_STATE_UNKNOWN;
                 continue;
-            }
-            else
-            {
-                offline_count = 0;
             }
 
             auto req = std::make_shared<GetState::Request>();
             auto future = get_state_client->async_send_request(req);
-            auto status = rclcpp::spin_until_future_complete(
-                sub_node, future, 10s);
+            auto status = rclcpp::spin_until_future_complete(sub_node, future, 3s);
             if (status == rclcpp::FutureReturnCode::SUCCESS)
             {
+                // 服务可用，重置该节点计数
+                count = 0;
                 auto response = future.get();
-                node_states_[node_name] = response->current_state.id; // Cache the current state
+                node_states_[node_name] = response->current_state.id;
                 if (response->current_state.id != lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE)
                 {
                     RCLCPP_ERROR(get_logger(), "%s is not active, current state: %d", node_name.c_str(), response->current_state.id);
@@ -230,7 +237,13 @@ private:
             else
             {
                 RCLCPP_ERROR(get_logger(), "Failed to get state from %s", node_name.c_str());
-                node_states_[node_name] = lifecycle_msgs::msg::State::PRIMARY_STATE_UNKNOWN; // Cache as unknown
+                count++;
+                if (count > 3)
+                {
+                    RCLCPP_ERROR(get_logger(), "%s is offline. Triggering restart error handler", node_name.c_str());
+                    error_handler();
+                }
+                node_states_[node_name] = lifecycle_msgs::msg::State::PRIMARY_STATE_UNKNOWN;
             }
         }
     }
@@ -261,6 +274,7 @@ private:
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr dart_buzzer_cmd_pub_;
     std::vector<std::string> nodes_;
     std::unordered_map<std::string, uint8_t> node_states_;
+    std::unordered_map<std::string, uint8_t> offline_count_;
     rclcpp::Service<Trigger>::SharedPtr shutdown_srv_;
 };
 

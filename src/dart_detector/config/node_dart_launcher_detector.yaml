@@ -9,12 +9,16 @@
         ExposureMode: "custom"
         ExposureTime: 7000 # us
         Brightness: 0.0
+        FrameRate: 10
     dh:
       enable: true
       image_width: 1280
       image_height: 1024
+      image_resized_width: 640
+      image_resized_height: 512
+      image_resize_enable: true
       camera_params:
-        FPS: 15
+        FPS: 36
         ExposureTime: 30 # ms
         Gain: 1.0
         Gamma: 1.0
@@ -33,6 +37,7 @@
         rmax: 89
         param1: 24
         param2: 24
+        lowpass_filter.alpha: 0.1
       qr_detect:
         binThreshold: 39
         save_image:

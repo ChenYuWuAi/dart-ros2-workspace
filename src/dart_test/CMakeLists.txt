@@ -31,4 +31,10 @@ target_include_directories(mock_dartmcu_node PUBLIC include ..)
 ament_target_dependencies(mock_dartmcu_node rclcpp dart_msgs)
 install(TARGETS mock_dartmcu_node DESTINATION lib/${PROJECT_NAME})
 
+# system identification node
+add_executable(system_identification_node src/system_identification_node.cpp)
+target_include_directories(system_identification_node PUBLIC include ..)
+ament_target_dependencies(system_identification_node rclcpp dart_msgs)
+install(TARGETS system_identification_node DESTINATION lib/${PROJECT_NAME})
+
 ament_package()

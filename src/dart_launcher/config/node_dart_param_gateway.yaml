@@ -1,3 +1,4 @@
 /node_dart_param_gateway:
   ros__parameters:
     param_database_path: "/home/ubuntu/dart-ros2-workspace/src/dart_launcher/config"
+    block_param_update_ingame: false

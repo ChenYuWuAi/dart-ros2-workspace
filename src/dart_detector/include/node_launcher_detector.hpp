@@ -44,7 +44,7 @@ private:
     rclcpp::node_interfaces::PostSetParametersCallbackHandle::SharedPtr callback_set_parameter_handle;
 
     void camera_thread(std::shared_ptr<CameraDriver> camera, const std::string &camera_name, bool is_qr_detection);
-    cv::Mat perform_greenlight_detection(cv::Mat &frame, bool &is_detected, double &x, double &y);
+    void perform_greenlight_detection(cv::Mat &frame, bool &is_detected, double &x, double &y);
     void on_parameter_event(const rclcpp::Parameter &param);
     bool load_and_open_camera(const std::string &camera_prefix, std::shared_ptr<CameraDriver> &camera_driver);
 
