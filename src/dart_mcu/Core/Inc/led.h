@@ -38,6 +38,10 @@ namespace LED {
     class LED_Flow {
     private:
         bool led_state_[8] = {false, false, false, false, false, false, false, false};
+        static constexpr uint16_t flowStackSize = 256;
+        StackType_t flowStack_[flowStackSize];
+        StaticTask_t flowTaskBuffer_;
+        TaskHandle_t flowTaskHandle_;
     public:
         uint8_t flow_state_ = FLOW_NONE;
 

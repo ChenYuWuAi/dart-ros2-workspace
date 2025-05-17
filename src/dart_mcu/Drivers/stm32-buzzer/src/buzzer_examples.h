@@ -7,11 +7,11 @@ extern "C" {
 
 #include "buzzer_tones.h"
 
-static note_t buzzer_warn[] = {
+const note_t buzzer_warn[] = {
         {659, 82},
 };
 
-static note_t buzzer_haru[] = {
+const note_t buzzer_haru[] = {
         {587,  574},
         {987,  561},
         {987,  291},
@@ -35,7 +35,7 @@ static note_t buzzer_haru[] = {
         {587,  1122},
 };
 
-static note_t buzzer_dont_say_lazy[] = {
+const note_t buzzer_dont_say_lazy[] = {
         {0,    331},
         {659,  82},
         {783,  248},
@@ -210,7 +210,7 @@ static note_t buzzer_dont_say_lazy[] = {
         {783,  331},
 };
 
-static note_t buzzer_never_forget[] = {
+const note_t buzzer_never_forget[] = {
         {164,  163},
         {329,  163},
         {311,  163},
@@ -323,7 +323,7 @@ static note_t buzzer_never_forget[] = {
         {1318, 815},
 };
 
-static note_t buzzer_bokuranomachi[] = {
+const note_t buzzer_bokuranomachi[] = {
         {0,    87},
         {659,  175},
         {783,  175},
@@ -456,7 +456,7 @@ static note_t buzzer_bokuranomachi[] = {
         {1318, 349},
 };
 
-static note_t buzzer_if_i_could_be_a_constelletion[] = {
+const note_t buzzer_if_i_could_be_a_constelletion[] = {
         {0,    375},
         {830,  473},
         {830,  126},
@@ -546,7 +546,7 @@ static note_t buzzer_if_i_could_be_a_constelletion[] = {
         {622,  462},
 };
 
-static note_t buzzer_bad_apple[] = {
+const note_t buzzer_bad_apple[] = {
         {311, 102},
         {311, 102},
         {349, 102},
@@ -2002,7 +2002,7 @@ static note_t buzzer_bad_apple[] = {
         {493, 102},
 };
 
-static note_t buzzer_guitar_loneliness_blue_earth[] = {
+const note_t buzzer_guitar_loneliness_blue_earth[] = {
         {0,    1243},
         {880,  155},
         {830,  155},
@@ -2764,7 +2764,7 @@ static note_t buzzer_guitar_loneliness_blue_earth[] = {
 };
 
 // Disable Autopilot Beep
-static note_t buzzer_autopilot_disconnect[] = {
+const note_t buzzer_autopilot_disconnect[] = {
         {NOTE_GS6, 8 * 7},
         {NOTE_GS5, 7 * 7},
         {0,        4 * 7},
@@ -2782,7 +2782,7 @@ static note_t buzzer_autopilot_disconnect[] = {
         {0,        45 * 7}
 };
 
-static note_t buzzer_launch[] = {
+const note_t buzzer_launch[] = {
         {220, 187},
         {329, 187},
         {493, 187},
@@ -2792,14 +2792,14 @@ static note_t buzzer_launch[] = {
         {830, 1012},
 };
 
-static note_t buzzer_dji_startup[] = {
+const note_t buzzer_dji_startup[] = {
         {NOTE_C5, 250},
         {NOTE_D5, 250},
         {NOTE_G5, 450},
         {0,       200}
 };
 
-static note_t buzzer_winxp[] = { // DS5 DS4 AS4 GS4 DS5 AS4
+const note_t buzzer_winxp[] = { // DS5 DS4 AS4 GS4 DS5 AS4
         {NOTE_DS6, 300},
         {NOTE_DS5, 150},
         {NOTE_AS5, 250},
@@ -2809,7 +2809,7 @@ static note_t buzzer_winxp[] = { // DS5 DS4 AS4 GS4 DS5 AS4
         {0,        200}
 };
 
-static note_t buzzer_approach[] = {
+const note_t buzzer_approach[] = {
         {311, 375},
         {466, 375},
         {783, 375},
@@ -2821,7 +2821,7 @@ static note_t buzzer_approach[] = {
 };
 
 // BGM_LAODA
-static note_t buzzer_laoda[] = {
+const note_t buzzer_laoda[] = {
         {698,  355},
         {0,    23},
         {1047, 355},
@@ -3893,7 +3893,7 @@ static note_t buzzer_laoda[] = {
         {466,  3188}
 };
 
-static note_t buzzer_startup[] = {
+const note_t buzzer_startup[] = {
         {NOTE_G5, 8 * 15},    // 第一个音符
         {NOTE_E6, 8 * 15},    // 第二个音符
         {NOTE_C6, 8 * 15},    // 第三个音符
@@ -3901,25 +3901,25 @@ static note_t buzzer_startup[] = {
         {NOTE_E7, 8 * 15},    // 第五个音符
 };
 
-static note_t buzzer_plug_in[] = {
+const note_t buzzer_plug_in[] = {
         {NOTE_G5, 100},
         {NOTE_D6, 100},
         {0,       100}
 };
 
-static note_t buzzer_remove[] = {
+const note_t buzzer_remove[] = {
         {NOTE_D6, 100},
         {NOTE_G5, 100},
         {0,       100}
 };
 
-static note_t buzzer_error[] = {
+const note_t buzzer_error[] = {
         {391, 107},
         {293, 107},
         {195, 642},
 };
 
-static note_t buzzer_protect[] = {
+const note_t buzzer_protect[] = {
         {NOTE_GS6, 250},
         {NOTE_DS6, 250},
         {NOTE_GS5, 250},
@@ -3927,7 +3927,7 @@ static note_t buzzer_protect[] = {
         {0,        100}
 };
 
-static note_t buzzer_chunriying[] = {
+const note_t buzzer_chunriying[] = {
         {1244, 300},
         {739,  300},
         {1108, 299},
@@ -3956,7 +3956,7 @@ static note_t buzzer_chunriying[] = {
         {1108, 500},
 };
 
-static note_t buzzer_internet_overdose[] = {
+const note_t buzzer_internet_overdose[] = {
         {0,    187},
         {246,  187},
         {932,  187},
@@ -4063,7 +4063,7 @@ static note_t buzzer_internet_overdose[] = {
         {369,  1125},
 };
 
-static note_t buzzer_if_i_could_be_a_constelletion_plus[] = {{311, 487},
+const note_t buzzer_if_i_could_be_a_constelletion_plus[] = {{311, 487},
                                                              {277, 243},
                                                              {277, 243},
                                                              {261, 243},
@@ -4418,7 +4418,7 @@ static note_t buzzer_if_i_could_be_a_constelletion_plus[] = {{311, 487},
                                                              {415, 1219},
 };
 
-static note_t buzzer_internet_angel[] = {
+const note_t buzzer_internet_angel[] = {
         {195, 100},
         {0,   500},
         {195, 99},
@@ -4869,14 +4869,14 @@ static note_t buzzer_internet_angel[] = {
         {440, 399},
 };
 
-static note_t buzzer_win10_plug_in[] = {
+const note_t buzzer_win10_plug_in[] = {
         {523, 272},
         {440, 136},
         {349, 136},
         {659, 272},
 };
 
-static note_t buzzer_win10_remove[] = {
+const note_t buzzer_win10_remove[] = {
         {440, 136},
         {349, 102},
         {329, 136},
