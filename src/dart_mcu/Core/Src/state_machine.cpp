@@ -3,10 +3,13 @@
 //
 
 // TODO: 准备阶段进行自瞄，随后将自瞄结果从offset存到primary，在launch时测算移动靶偏移量
+// TODO: 增加ActionMatch_End，防止速射后空放
+// TODO: 增加宏，在比赛模式下读取Switch_Left，模拟飞镖发射站闸门的三个状态
 
 #include "state_machine.h"
 
 #include <cmath>
+#include <future>
 #include <sys/types.h>
 
 #include "openfsm.h"
@@ -745,8 +748,11 @@ do{                        \
                     {
                         if (motor_controller::MotorYawLSController.state_ !=
                             motor_controller::E_PID_Velocity_Angle_Controller_State::VELOCITY_CONTROL)
+                        {
                             motor_controller::MotorYawLSController.set_state(
                                 motor_controller::E_PID_Velocity_Angle_Controller_State::VELOCITY_CONTROL);
+                            motor_controller::MotorYawLSController.target_velocity_ = 0;
+                        }
                         if (RC_Data.ch0 <= 700 && !yaw_switch_state == Triggered)
                             motor_controller::MotorYawLSController.target_velocity_ = -100;
                         else if (RC_Data.ch0 > 700 && RC_Data.ch0 <= 900 && !yaw_switch_state == Triggered)
@@ -1203,7 +1209,6 @@ do{                        \
                     fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = false;
                 soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_winxp));
                 fsm.nextAction();
-                static uint8_t pre_launch_grant_confirm = 0;
                 return;
             }
 
@@ -1245,6 +1250,9 @@ do{                        \
             uint8_t game_progress = ext_game_status.game_progress;
             uint8_t dart_remaining_time = ext_dart_info.dart_remaining_time;
             uint16_t latest_launch_cmd_time = ext_dart_client_cmd.latest_launch_cmd_time;
+            uint16_t dart_info = ext_dart_info.dart_info;
+            state_machine::E_Target_Type target_type = Default;
+            target_type = static_cast<E_Target_Type>((dart_info >> 8) & 0x03);
 
             // 准备阶段结束的时候，将自瞄值offsets更新到primary内
             if (fsm.custom<Dart_FSM>()->ActionMatch_Wait_last_game_progress == 2 &&
@@ -1314,9 +1322,9 @@ do{                        \
                 pre_launch_grant = true;
             }
 
-            // 门控 比赛时间不足\准备阶段\自检时\自瞄进行中 拒绝发射
+            // 门控 比赛时间不足\准备阶段\自检时\自瞄进行中\选到基地随机移动目标 拒绝发射
             if ((ext_game_status.stage_remain_time < 10 && game_progress == 4) || game_progress == 1 ||
-                game_progress == 2 || game_progress == 3 || game_progress == 5)
+                game_progress == 2 || game_progress == 3 || game_progress == 5 || target_type == RandomMoving)
             {
                 launch_grant_ = false;
                 fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = false;
@@ -1333,16 +1341,10 @@ do{                        \
             }
 #endif
 
-
             if (pre_launch_grant)
                 pre_launch_grant_confirm = 1;
             double base_velocity = 0;
-            if (launch_grant_)
-            {
-                dart_mcu_log("Launch granted!");
-                pre_launch_grant_confirm = 0;
-                fsm.nextAction();
-            }else if (pre_launch_grant_confirm)
+            if (pre_launch_grant_confirm || launch_grant_)
             {
                 // 将双装填电机都拉到最下面
                 base_velocity = CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
@@ -1356,6 +1358,12 @@ do{                        \
             }else
             {
                 base_velocity = 0;
+            }
+            if (launch_grant_)
+            {
+                dart_mcu_log("Launch granted!");
+                pre_launch_grant_confirm = 0;
+                fsm.nextAction();
             }
 
             // 设置Load电机速度
@@ -1408,7 +1416,8 @@ do{                        \
             // 通过读取裁判系统变量，获取目标种类
             // 0 : 开局默认/未选定/前哨站 1: 基地固定目标 2: 基地随机固定目标 4: 基地随机移动目标
             uint16_t dart_info = ext_dart_info.dart_info;
-            uint8_t target_type = (dart_info >> 8) & 0x03;
+            state_machine:: E_Target_Type target_type = Default;
+            target_type = static_cast<E_Target_Type>((dart_info >> 8) & 0x03);
 
             // Launch里面有几种连续状态：
             // 0: Wait Autoaim 1: Wait stable 2: Downward 3: Upward 4: Trigger 5. Restore Trigger
@@ -1423,7 +1432,7 @@ do{                        \
                     // TODO:速射——等待自瞄3秒->2秒
                     if (xTaskGetTickCount() -
                         fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ < pdMS_TO_TICKS(CONFIG_AUTOAIM_TIMEOUT_MS)
-                        && target_type == 1
+                        && target_type == E_Target_Type::RandomStationary
                     )
                     {
                         updateAutoAim(msgDartProtocols);
@@ -1448,9 +1457,10 @@ do{                        \
                 }
                 break;
             case 1:
+                // TODO: 改成Yaw轴电机稳定
                 // 等待电机稳定
-                if (xTaskGetTickCount() - fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ >
-                    pdMS_TO_TICKS(CONFIG_LAUNCH_WAIT_MOTOR_STABLE_TIME))
+                if (abs(motor_controller::MotorYawLSController.target_angle_with_rounds_ -
+                    motor_controller::MotorYawLSController.current_angle_with_rounds_) < 50)
                 {
                     fsm.custom<Dart_FSM>()->ActionMatch_Launch_State = 2;
                 }
@@ -1466,7 +1476,7 @@ do{                        \
                 {
                     meter::velocity_meter.enable();
                     fsm.custom<Dart_FSM>()->launch_operating_ = true;
-                    soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_approach));
+                    soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_launch));
                     fsm.custom<Dart_FSM>()->ActionMatch_Launch_State = 3;
                 }
                 break;
@@ -1474,6 +1484,8 @@ do{                        \
             case 3:
                 // 向上运动
                 // TODO:速射——CONFIG_MOTOR_LOAD_ANGLE_UP从115000->55000
+                // TODO:在滑台开裂的情况下测试速射
+                setTriggerServotoTrigger();
                 if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
                     CONFIG_MOTOR_LOAD_ANGLE_UP)
                 {
@@ -1654,7 +1666,7 @@ do{                        \
                 break;
             case 3:
                 base_velocity = -(CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD);
-            // 装填电机向上运动到发射位置
+            // 装填电机向上运动到中间位置
                 if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
                     CONFIG_MOTOR_LOAD_ANGLE_POST_LOAD |
                     motor_controller::MotorLoadController[1].current_angle_with_rounds_ <=
@@ -1674,17 +1686,31 @@ do{                        \
                 {
                     setSlidedownServotoSlide();
                     fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ = xTaskGetTickCount();
+                    fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reload_State = 5;
                 }
-                fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reload_State = 5;
                 break;
             case 5:
-                // TODO:速射——升降机复位后触发下滑节省时间
+                // TODO:速射——升降机复位后触发下滑，节省时间
                 if (xTaskGetTickCount() - fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ >
                     pdMS_TO_TICKS(CONFIG_SLIDE_SERVO_WAIT_TIME))
                 {
                     setSlidedownServotoCut();
-                    fsm.nextAction();
                 }
+
+                // 同时将装填电机往下拉，进一步节省时间
+                base_velocity = CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
+                if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ >=
+                    CONFIG_MOTOR_LOAD_ANGLE_LAUNCH_DOWN ||
+                    motor_controller::MotorLoadController[1].current_angle_with_rounds_ >=
+                    CONFIG_MOTOR_LOAD_ANGLE_LAUNCH_DOWN)
+                {
+                    base_velocity = 0;
+                }
+
+                // 等待电机到位再进入ActionMatch_Wait
+                if (xTaskGetTickCount() - fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ >
+                    pdMS_TO_TICKS(CONFIG_SLIDE_SERVO_SLIDE_TIME))
+                    fsm.nextAction();
                 break;
             default:
                 break;

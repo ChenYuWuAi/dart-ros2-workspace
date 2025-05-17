@@ -48,6 +48,14 @@ namespace state_machine {
         OPERATING
     };
 
+    enum E_Target_Type
+    {
+        Default, // 开局默认/未选定/前哨站
+        Stationary, // 基地固定目标
+        RandomStationary, // 基地随机固定目标
+        RandomMoving // 基地随机移动目标
+    };
+
     struct FSM {
         OpenFSM openFSM_;
 
