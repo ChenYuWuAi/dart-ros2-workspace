@@ -32,9 +32,16 @@
 
 #include <dart_config.h>
 
-#include <queue>
-
 #include <dart_launcher_default_value.hpp>
+
+#include <atomic>  // 用于原子操作
+
+// 日志静态环形队列配置
+#define LOG_QUEUE_SIZE 10
+static char logQueueBuf[LOG_QUEUE_SIZE][LOG_BUF_LEN];
+static std::atomic<uint8_t> logQueueHead{0};
+static std::atomic<uint8_t> logQueueTail{0};
+static std::atomic<uint8_t> logQueueCount{0};
 
 enum states {
     WAITING_AGENT,
@@ -42,9 +49,6 @@ enum states {
     AGENT_CONNECTED,
     AGENT_DISCONNECTED
 } state;
-
-// 日志队列
-std::queue<char *> xLogQueue;  // 存放 malloc 出来的 char*
 
 // MicroROS 实体
 rcl_allocator_t allocator;
@@ -66,8 +70,6 @@ char msgString_buf[LOG_BUF_LEN];
 
 velocity_meter_result_t velocity_meter_result;
 
-TaskHandle_t velocity_meter_result_task_handle;
-
 TickType_t last_greenlight_update_time = 0;
 
 dart_msgs__msg__GreenLight msgGreenLight;
@@ -83,12 +85,6 @@ void *microros_allocate(size_t size, void *state);
 void microros_deallocate(void *pointer, void *state);
 void *microros_reallocate(void *pointer, size_t size, void *state);
 void *microros_zero_allocate(size_t number_of_elements, size_t size_of_element, void *state);
-}
-
-void publish_velocity_meter_result(void *arg) {
-    while (1) {
-        vTaskSuspend(nullptr);
-    }
 }
 
 void microros_node_task(void) {
@@ -121,10 +117,7 @@ void microros_node_task(void) {
         msgDartStatus.last_launch_speed = velocity_meter_result.velocity;
     }, 0.116, 0.0000005);
 
-    xTaskCreate(publish_velocity_meter_result, "publish_velocity_meter_result", 64, NULL, 1,
-                &velocity_meter_result_task_handle);
-
-    xTaskCreate(state_machine::fsm_thread, "fsm_thread", 256, NULL, 11, NULL);
+    xTaskCreate(state_machine::fsm_thread, "fsm_thread", 1024, NULL, 11, NULL);
 
     xTaskCreate(motor_controller::pid_control_task, "pid_control_task", 256, NULL, 25, NULL);
 
@@ -200,32 +193,25 @@ void timer_logger_callback(rcl_timer_t *timer, int64_t last_call_time) {
     if (!timer)
         return;
 
-    // 尝试从队列取出消息
-    if (!xLogQueue.empty()) {
-        char *pMsg = xLogQueue.front();
+    // 从静态环形队列取出消息
+    if (logQueueCount.load() > 0) {
+        uint8_t head = logQueueHead.load();
+        char *pMsg = logQueueBuf[head];
         if (pMsg != nullptr) {
-            // 额外检查确保pMsg是有效指针
-            // 填充 ROS 消息并发布，增加安全检查
             size_t len = strlen(pMsg);
-            // 确保不超过缓冲区容量
             if (len >= msgString.data.capacity) {
                 len = msgString.data.capacity - 1;
             }
-            // 安全复制
             memcpy(msgString.data.data, pMsg, len);
             msgString.data.data[len] = '\0';  // 确保字符串正确终止
             msgString.data.size = len + 1;
 
             // 发布消息
             rcl_publish(&publisher_logger, &msgString, nullptr);
-
-            // 释放内存，确保先操作完再弹出队列
-            vPortFree(pMsg);
-            xLogQueue.pop();
-        } else {
-            // 如果队列中的指针为NULL，直接弹出
-            xLogQueue.pop();
         }
+        // 更新环形队列指针和计数
+        logQueueHead.store((uint8_t) ((head + 1) % LOG_QUEUE_SIZE));
+        logQueueCount.fetch_sub(1);
     }
 }
 
@@ -236,9 +222,7 @@ void timer_send_status_callback(rcl_timer_t *timer, int64_t last_call_time) {
         // 发送velocity 填充last_launch_time
         static TickType_t last_send_tick = velocity_meter_result.record_time;
         if (last_send_tick != velocity_meter_result.record_time) {
-            char buf[30]; // 增加缓冲区大小，以防浮点数打印过长
-            snprintf(buf, sizeof(buf), "velocity: %.2f", velocity_meter_result.velocity);
-            dart_mcu_log(buf);
+            dart_mcu_log("velocity: %.2f", velocity_meter_result.velocity);
             last_send_tick = velocity_meter_result.record_time;
             msgDartStatus.last_launch_time = rmw_uros_epoch_millis();
         }
@@ -452,9 +436,6 @@ void subscription_buzzer_callback(const void *msgin) {
     }
 }
 
-// 将堵转电机移动到初始位置
-state_machine::UpsideState state_machine::upside_state = state_machine::UpsideState::Idle;
-
 void subscription_protocol_setting_callback(const void *msgin) {
     const dart_msgs__msg__DartLauncherParams *msg = (const dart_msgs__msg__DartLauncherParams *) msgin;
 
@@ -475,19 +456,22 @@ void subscription_greenlight_callback(const void *msgin) {
     }
 }
 
-// --- 日志接口：中断中不可调用 ---
-void dart_mcu_log(const char *msg) {
-    // 如果queue长于3 丢弃
-    if (xLogQueue.size() > 10) {
-        return;
+// 日志接口：中断中不可调用, 将格式化消息写入静态环形队列
+void dart_mcu_log(const char *fmt, ...) {
+    if (logQueueCount.load() >= LOG_QUEUE_SIZE) {
+        return; // 队列已满丢弃
     }
-    size_t msg_len = strlen(msg);
-    char *pMsg = (char *) pvPortMalloc(msg_len + 1);
-    if (pMsg != NULL) {
-        // 使用安全的字符串复制，确保不会溢出
-        strncpy(pMsg, msg, msg_len);
-        pMsg[msg_len] = '\0';  // 确保字符串正确终止
-        // 发送到队列
-        xLogQueue.push(pMsg);
+    uint8_t tail = logQueueTail.load();
+    char *slot = logQueueBuf[tail];
+    va_list args;
+    va_start(args, fmt);
+    int len = vsnprintf(slot, LOG_BUF_LEN, fmt, args);
+    va_end(args);
+    if (len < 0) {
+        slot[0] = '\0';
+    } else if (len >= LOG_BUF_LEN) {
+        slot[LOG_BUF_LEN - 1] = '\0';
     }
+    logQueueTail.store((uint8_t) ((tail + 1) % LOG_QUEUE_SIZE));
+    logQueueCount.fetch_add(1);
 }

@@ -4,6 +4,8 @@
 
 #include "led.h"
 #include "math.h"
+#include "FreeRTOS.h"
+#include "task.h"
 
 namespace LED {
 
@@ -84,7 +86,15 @@ namespace LED {
         for (int i = 0; i < 8; i++) {
             setLED((LED_Type) (LED_FLOW_0 + i), led_state_[i]);
         }
-        xTaskCreate(flowTask, "LED_Flow", 64, this, 18, nullptr);
+        flowTaskHandle_ = xTaskCreateStatic(
+            flowTask,
+            "LED_Flow",
+            flowStackSize,
+            this,
+            18,
+            flowStack_,
+            &flowTaskBuffer_
+        );
     }
 
     void LED_Flow::updateStatetoLED() {

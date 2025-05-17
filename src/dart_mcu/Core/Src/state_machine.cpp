@@ -635,9 +635,7 @@ do{                        \
                     else
                         msgDartStatus.primary_yaw_offset = motor_controller::AutoAimController.update(0);
                     no_autoaim_count = 0;
-                    static char buf[30];
-                    snprintf(buf, sizeof(buf), "Autoaim updated to %d", msgDartStatus.primary_yaw_offset);
-                    dart_mcu_log(buf);
+                    dart_mcu_log("Autoaim updated to %d", msgDartStatus.primary_yaw_offset);
                     motor_controller::MotorYawLSController.target_angle_with_rounds_ =
                         msgDartParams_.primary_yaw + msgDartStatus.primary_yaw_offset;
 

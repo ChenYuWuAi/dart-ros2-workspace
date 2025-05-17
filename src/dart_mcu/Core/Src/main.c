@@ -205,7 +205,7 @@ static volatile uint8_t g_judge_decode_memory = MEMORY0;
 /*---------------------------------function of interrupt begin------------------------------------*/
 // 遥控&裁判系统解码
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size) {
-      if (huart == RC_UART_HANDLE && huart->RxEventType == HAL_UART_RXEVENT_IDLE) {
+    if (huart == RC_UART_HANDLE && huart->RxEventType == HAL_UART_RXEVENT_IDLE) {
         // 确保数据大小正确且不超过缓冲区大小
         if (Size == RC_FRAME_LEN && Size <= RC_UART_BUFFER_LENGTH) {
             // 安全复制数据
@@ -216,23 +216,26 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size) {
         // 清空缓冲区并重启DMA接收
         memset(RC_UART_RXBUFFER, 0, RC_UART_BUFFER_LENGTH);
         HAL_UARTEx_ReceiveToIdle_DMA(RC_UART_HANDLE, RC_UART_RXBUFFER, RC_UART_BUFFER_LENGTH);
-    } else if (huart == REFEREE_UART_HANDLE && huart->RxEventType == HAL_UART_RXEVENT_IDLE) {        // 确保接收的数据大小不超过缓冲区大小
+    } else if (huart == REFEREE_UART_HANDLE &&
+               huart->RxEventType == HAL_UART_RXEVENT_IDLE) {        // 确保接收的数据大小不超过缓冲区大小
         if (Size > 0 && Size <= REFEREE_UART_BUFFER_LENGTH) {
             // 使用全局变量，并在一次操作中获取当前值，避免竞态条件
             uint8_t current_buffer = g_judge_decode_memory;
             uint8_t next_buffer = (current_buffer + 1) % 2;
-            
+
             // 先设置下一次接收
-            HAL_UARTEx_ReceiveToIdle_DMA(REFEREE_UART_HANDLE, REFEREE_UART_RXBUFFER[next_buffer], REFEREE_UART_BUFFER_LENGTH);
-            
+            HAL_UARTEx_ReceiveToIdle_DMA(REFEREE_UART_HANDLE, REFEREE_UART_RXBUFFER[next_buffer],
+                                         REFEREE_UART_BUFFER_LENGTH);
+
             // 处理当前接收到的数据
             RefereeReceive(Size, REFEREE_UART_RXBUFFER[current_buffer]);
-            
+
             // 切换缓冲区
             g_judge_decode_memory = next_buffer;
         } else {
             // 接收数据过大或无效，重置接收
-            HAL_UARTEx_ReceiveToIdle_DMA(REFEREE_UART_HANDLE, REFEREE_UART_RXBUFFER[g_judge_decode_memory], REFEREE_UART_BUFFER_LENGTH);
+            HAL_UARTEx_ReceiveToIdle_DMA(REFEREE_UART_HANDLE, REFEREE_UART_RXBUFFER[g_judge_decode_memory],
+                                         REFEREE_UART_BUFFER_LENGTH);
         }
     }
 }
@@ -243,7 +246,7 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
         __HAL_UART_CLEAR_FLAG(huart, UART_FLAG_ORE | UART_FLAG_NE | UART_FLAG_FE | UART_FLAG_PE);
         __HAL_UART_CLEAR_FLAG(huart, UART_FLAG_RXNE);
         __HAL_UART_CLEAR_OREFLAG(huart);
-        
+
         // 重置DMA
         HAL_UART_AbortReceive(huart);
         // 重新启动DMA接收
@@ -252,13 +255,14 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
             HAL_UARTEx_ReceiveToIdle_DMA(RC_UART_HANDLE, RC_UART_RXBUFFER, RC_UART_BUFFER_LENGTH);
         } else if (huart == REFEREE_UART_HANDLE) {
             // 使用全局变量，确保与RxEventCallback使用相同的缓冲区
-            HAL_UARTEx_ReceiveToIdle_DMA(REFEREE_UART_HANDLE, REFEREE_UART_RXBUFFER[g_judge_decode_memory], REFEREE_UART_BUFFER_LENGTH);
+            HAL_UARTEx_ReceiveToIdle_DMA(REFEREE_UART_HANDLE, REFEREE_UART_RXBUFFER[g_judge_decode_memory],
+                                         REFEREE_UART_BUFFER_LENGTH);
         }
-        
+
         // 重新启用中断
         __HAL_UART_ENABLE_IT(huart, UART_IT_RXNE);
         __HAL_UART_ENABLE_IT(huart, UART_IT_ERR);
-        
+
         // 清除错误状态
         huart->ErrorCode = HAL_UART_ERROR_NONE;
         huart->gState = HAL_UART_STATE_READY;
