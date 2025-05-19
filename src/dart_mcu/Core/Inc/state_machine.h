@@ -33,6 +33,7 @@ namespace state_machine {
         Wait,
         Launch,
         Reload,
+        Exit,
         Undefined
     };
 
