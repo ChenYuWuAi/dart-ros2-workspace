@@ -64,6 +64,10 @@ public:
     std::shared_ptr<soundEffect_t>
     addSoundEffect(note_t *notes_, size_t notes_size_, bool emergency = false, bool circulating = false,  bool add_rest = true);
 
+    std::shared_ptr<soundEffect_t>
+    addSoundEffect(const note_t *notes_, size_t notes_size_, bool emergency = false, bool circulating = false,  bool add_rest = true);
+
+
     // 开始播放音效
     void Start_SoundEffect();
 

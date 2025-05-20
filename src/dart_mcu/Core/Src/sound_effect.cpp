@@ -37,6 +37,35 @@ SoundEffectManager::addSoundEffect(
     if (emergency) {
         soundEffects_queue.insert(soundEffects_queue.begin(), se);
     } else {
+        // 限制队列长度
+        if (soundEffects_queue.size() >= 10) {
+            soundEffects_queue.erase(soundEffects_queue.begin());
+        }
+        soundEffects_queue.push_back(se);
+    }
+    if (!currentSoundEffect) {
+        Start_SoundEffect();
+    }
+    return se;
+}
+
+shared_ptr<soundEffect_t>
+SoundEffectManager::addSoundEffect(
+        const note_t *notes_, size_t notes_size_, bool emergency, bool circulating, bool add_rest) {
+    auto se = make_shared<soundEffect_t>();
+    se->notes = const_cast<note_t *>(notes_);
+    se->notes_size = notes_size_;
+    se->progress = 0;
+    se->state = circulating ? SoundEffectState::READY_FOR_CIRCULATING
+                            : SoundEffectState::READY;
+    se->add_rest = add_rest;
+    if (emergency) {
+        soundEffects_queue.insert(soundEffects_queue.begin(), se);
+    } else {
+        // 限制队列长度
+        if (soundEffects_queue.size() >= 10) {
+            soundEffects_queue.erase(soundEffects_queue.begin());
+        }
         soundEffects_queue.push_back(se);
     }
     if (!currentSoundEffect) {
