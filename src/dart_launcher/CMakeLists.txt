@@ -14,6 +14,21 @@ if(NOT CMAKE_CXX_STANDARD)
     set(CMAKE_CXX_STANDARD 14)
 endif()
 
+
+# 将编译优化从 -O0 改为 -O3，并启用 ARM 平台的优化选项
+# 更新编译优化选项以适配 Cortex-A76
+# If Arm Cortex-A76 is used, set the optimization flags accordingly
+if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+        message(STATUS "aarch64")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=armv8-a -mtune=cortex-a76 -ffast-math")
+elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+        message(STATUS "x86_64")
+        # x86_64 处理器的优化选项
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native -ffast-math")
+else()
+        message(STATUS "Unknown architecture: ${CMAKE_SYSTEM_PROCESSOR}")
+endif()
+
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_compile_options(-Wall -Wextra -Wpedantic)
 endif()

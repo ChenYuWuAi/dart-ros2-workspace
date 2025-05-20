@@ -9,7 +9,7 @@
         ExposureMode: "custom"
         ExposureTime: 7000 # us
         Brightness: 0.0
-        FrameRate: 10
+        FrameRate: 1
     dh:
       enable: true
       image_width: 1280

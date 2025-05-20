@@ -1,8 +1,8 @@
 {
-    "auto_aim_enabled": true,
+    "auto_aim_enabled": false,
     "auxiliary_force_offsets": [
         0,
-        -500000,
+        -100000,
         -300000,
         -300000
     ],
@@ -14,9 +14,9 @@
     ],
     "dart_launch_process_offset_begin": 0,
     "dart_launch_process_offset_end": 3,
-    "last_param_update_time": 1747242651905,
-    "primary_force": 9300000,
+    "last_param_update_time": 1747546113117,
+    "primary_force": 18585673,
     "primary_force_offset": 0,
-    "primary_yaw": 116450,
+    "primary_yaw": 92801,
     "target_auto_aim_x_axis": 350.0
 }
