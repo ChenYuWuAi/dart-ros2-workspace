@@ -1,6 +1,5 @@
 #include "detector/greenlight_detect.h"
 #include <thread> // for hardware_concurrency
-#include <opencv2/core/parallel/parallel.hpp>
 
 /**
  * @brief 构造函数，从paramFile读取参数
@@ -80,9 +79,7 @@ void TopArmorDetect::Hough_Circle(cv::Mat &inputImage)
     cv::Mat gray;
     cv::cvtColor(inputImage, gray, cv::COLOR_BGR2GRAY);
 
-    cv::parallel_for_(cv::Range(0, 1), [&](const cv::Range &range) {
-        cv::HoughCircles(gray, _circles, cv::HOUGH_GRADIENT, 1, minDIST, PARAM1, PARAM2, 0, 0);
-    });
+    cv::HoughCircles(gray, _circles, cv::HOUGH_GRADIENT, 1, minDIST, PARAM1, PARAM2, 0, 0);
 }
 
 /**
@@ -121,20 +118,8 @@ void TopArmorDetect::preprocess(cv::Mat &frame, cv::Mat &result)
     cv::Scalar lower_green(HMIN, SMIN, VMIN); // 绿色的下界（H, S, V）
     cv::Scalar upper_green(HMAX, SMAX, VMAX); // 绿色的上界（H, S, V）
 
-    cv::Mat mask = cv::Mat::zeros(src.size(), CV_8UC1);
-    cv::parallel_for_(cv::Range(0, src.rows), [&](const cv::Range &range) {
-        for (int i = range.start; i < range.end; ++i) {
-            for (int j = 0; j < src.cols; ++j) {
-                cv::Vec3b pixel = src.at<cv::Vec3b>(i, j);
-                if (pixel[0] >= lower_green[0] && pixel[0] <= upper_green[0] &&
-                    pixel[1] >= lower_green[1] && pixel[1] <= upper_green[1] &&
-                    pixel[2] >= lower_green[2] && pixel[2] <= upper_green[2]) {
-                    mask.at<uchar>(i, j) = 255;
-                }
-            }
-        }
-    });
-
+    cv::Mat mask;
+    cv::inRange(src, lower_green, upper_green, mask);
     cv::bitwise_and(frame, frame, result, mask);
     _preprocessResult = result;
 }

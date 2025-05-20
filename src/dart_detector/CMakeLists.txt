@@ -18,6 +18,7 @@ elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native -ffast-math")
 else()
         message(STATUS "Unknown architecture: ${CMAKE_SYSTEM_PROCESSOR}")
+endif()
         
 # find dependencies
 find_package(ament_cmake REQUIRED)
