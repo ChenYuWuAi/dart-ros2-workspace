@@ -25,8 +25,7 @@
 #include "velocimeter.h"
 #include "rng.h"
 
-namespace state_machine
-{
+namespace state_machine {
 #define anyMotorDisconnected \
 (motor::MotorYawLS.motor_state_ == motor::E_MotorState::DISCONNECTED || \
 motor::MotorLoad[0].motor_state_ == motor::E_MotorState::DISCONNECTED || \
@@ -305,7 +304,7 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
      */
     template<typename T>
     E_ResetActionReturnState
-    actionResetLSUntilTrigger(motor_controller::pid_angle_velocity_controller<T> &pid,
+    actionResetLSUntilTrigger(motor_controller::pid_angle_velocity_controller <T> &pid,
                               E_Lead_Screw_Switch_State &triggerFlag,
                               int16_t target_reset_velocity) {
         if (pid.motor_->motor_state_ == motor::E_MotorState::DISCONNECTED) {
@@ -688,10 +687,9 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                                     target_angle_with_rounds_ = msgDartParams.primary_yaw;
                     } else {
                         if (motor_controller::MotorYawLSController.state_ !=
-                            motor_controller::E_PID_Velocity_Angle_Controller_State::VELOCITY_CONTROL)
-                        {
+                            motor_controller::E_PID_Velocity_Angle_Controller_State::VELOCITY_CONTROL) {
                             motor_controller::MotorYawLSController.set_state(
-                                motor_controller::E_PID_Velocity_Angle_Controller_State::VELOCITY_CONTROL);
+                                    motor_controller::E_PID_Velocity_Angle_Controller_State::VELOCITY_CONTROL);
                             motor_controller::MotorYawLSController.target_velocity_ = 0;
                         }
                         if (RC_Data.ch0 <= 700 && !yaw_switch_state == Triggered)
@@ -823,85 +821,76 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                 }
 
                 // 解除扳机控制
-                switch (fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reset_State)
-                {
-                case 0:
-                    if (RC_Data.Switch_Left == RC_SW_UP && RC_Data.ch4_wheel <= 514)
-                    {
-                        fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reset_State = 1;
-                    }
-                    break;
-                case 1:
-                    // 将拉簧拉到底
-                    // 装填电机向下运动到装填位置
-                    base_velocity = CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
-                    if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ >=
-                        CONFIG_MOTOR_LOAD_ANGLE_LAUNCH_DOWN |
-                        motor_controller::MotorLoadController[1].current_angle_with_rounds_ >=
-                        CONFIG_MOTOR_LOAD_ANGLE_LAUNCH_DOWN)
-                    {
-                        fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reset_State = 2;
-                        setTriggerServotoTrigger();
-                        fsm.custom<Dart_FSM>()->ActionGeneral_Timer3_ = xTaskGetTickCount();
-                    }
-                    break;
-                case 2:
-                    // 等待一小会，舵机到位
-                    if (xTaskGetTickCount() - fsm.custom<Dart_FSM>()->ActionGeneral_Timer3_ >
-                        pdMS_TO_TICKS(CONFIG_TRIGGER_SERVO_WAIT_TIME))
-                    {
-                        fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reset_State = 3;
-                    }
-                    break;
-                case 3:
-                    // 装填电机向上运动到初始位置
-                    base_velocity = -CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
-                    if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
-                        CONFIG_MOTOR_LOAD_ANGLE_UP |
-                        motor_controller::MotorLoadController[1].current_angle_with_rounds_ <=
-                        CONFIG_MOTOR_LOAD_ANGLE_UP)
-                    {
-                        fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reset_State = 4;
-                        setTriggerServotoReload();
-                    }
-                    break;
-                case 4:
-                    // 等待Wheel复位
-                    if (RC_Data.ch4_wheel > 514)
-                    {
+                switch (fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reset_State) {
+                    case 0:
+                        if (RC_Data.Switch_Left == RC_SW_UP && RC_Data.ch4_wheel <= 514) {
+                            fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reset_State = 1;
+                        }
+                        break;
+                    case 1:
+                        // 将拉簧拉到底
+                        // 装填电机向下运动到装填位置
+                        base_velocity = CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
+                        if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ >=
+                            CONFIG_MOTOR_LOAD_ANGLE_LAUNCH_DOWN |
+                            motor_controller::MotorLoadController[1].current_angle_with_rounds_ >=
+                            CONFIG_MOTOR_LOAD_ANGLE_LAUNCH_DOWN) {
+                            fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reset_State = 2;
+                            setTriggerServotoTrigger();
+                            fsm.custom<Dart_FSM>()->ActionGeneral_Timer3_ = xTaskGetTickCount();
+                        }
+                        break;
+                    case 2:
+                        // 等待一小会，舵机到位
+                        if (xTaskGetTickCount() - fsm.custom<Dart_FSM>()->ActionGeneral_Timer3_ >
+                            pdMS_TO_TICKS(CONFIG_TRIGGER_SERVO_WAIT_TIME)) {
+                            fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reset_State = 3;
+                        }
+                        break;
+                    case 3:
+                        // 装填电机向上运动到初始位置
+                        base_velocity = -CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
+                        if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
+                            CONFIG_MOTOR_LOAD_ANGLE_UP |
+                            motor_controller::MotorLoadController[1].current_angle_with_rounds_ <=
+                            CONFIG_MOTOR_LOAD_ANGLE_UP) {
+                            fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reset_State = 4;
+                            setTriggerServotoReload();
+                        }
+                        break;
+                    case 4:
+                        // 等待Wheel复位
+                        if (RC_Data.ch4_wheel > 514) {
+                            fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reset_State = 0;
+                        }
+                        break;
+                    default:
                         fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reset_State = 0;
-                    }
-                    break;
-                default:
-                    fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reset_State = 0;
                 }
 
                 // 升降机装填控制
-                switch (fsm.custom<Dart_FSM>()->ActionRemoteandReload_Slidedown_State)
-                {
-                case 0:
-                    if (RC_Data.Switch_Left == RC_SW_MID && RC_Data.ch4_wheel <= 514)
-                    {
-                        fsm.custom<Dart_FSM>()->ActionRemoteandReload_Slidedown_State = 1;
-                        setSlidedownServotoSlide();
-                        fsm.custom<Dart_FSM>()->ActionGeneral_Timer2_ = xTaskGetTickCount();
-                    }
-                    break;
-                case 1:
-                    if (xTaskGetTickCount() - fsm.custom<Dart_FSM>()->ActionGeneral_Timer2_ >
-                        pdMS_TO_TICKS(CONFIG_SLIDE_SERVO_WAIT_TIME))
-                    {
-                        fsm.custom<Dart_FSM>()->ActionRemoteandReload_Slidedown_State = 2;
-                        setSlidedownServotoCut();
-                    }
-                    break;
-                case 2:
-                    // 等待遥控器复位
-                    if (RC_Data.ch4_wheel > 514)
+                switch (fsm.custom<Dart_FSM>()->ActionRemoteandReload_Slidedown_State) {
+                    case 0:
+                        if (RC_Data.Switch_Left == RC_SW_MID && RC_Data.ch4_wheel <= 514) {
+                            fsm.custom<Dart_FSM>()->ActionRemoteandReload_Slidedown_State = 1;
+                            setSlidedownServotoSlide();
+                            fsm.custom<Dart_FSM>()->ActionGeneral_Timer2_ = xTaskGetTickCount();
+                        }
+                        break;
+                    case 1:
+                        if (xTaskGetTickCount() - fsm.custom<Dart_FSM>()->ActionGeneral_Timer2_ >
+                            pdMS_TO_TICKS(CONFIG_SLIDE_SERVO_WAIT_TIME)) {
+                            fsm.custom<Dart_FSM>()->ActionRemoteandReload_Slidedown_State = 2;
+                            setSlidedownServotoCut();
+                        }
+                        break;
+                    case 2:
+                        // 等待遥控器复位
+                        if (RC_Data.ch4_wheel > 514)
+                            fsm.custom<Dart_FSM>()->ActionRemoteandReload_Slidedown_State = 0;
+                        break;
+                    default:
                         fsm.custom<Dart_FSM>()->ActionRemoteandReload_Slidedown_State = 0;
-                    break;
-                default:
-                    fsm.custom<Dart_FSM>()->ActionRemoteandReload_Slidedown_State = 0;
                 }
 
                 // 升降机控制
@@ -972,12 +961,9 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                 } else {
                     if (!fsm.custom<Dart_FSM>()->ActionRemote_launch_complete_) {
                         if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
-                            CONFIG_MOTOR_LOAD_ANGLE_UP)
-                        {
+                            CONFIG_MOTOR_LOAD_ANGLE_UP) {
                             base_velocity = -CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD / 4;
-                        }
-                        else
-                        {
+                        } else {
                             base_velocity = -CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
                         }
                         if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
@@ -1095,6 +1081,13 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
 
     class ActionMatch_Wait : public OpenFSMAction {
         void enter(OpenFSM &fsm) const override {
+            // 判断是否一路skip
+            if (msgDartStatus.dart_launch_process >
+                msgDartProtocols.dart_launch_process_offset_end) {
+                fsm.nextAction();
+                return;
+            }
+
             // 判断是否连续发射，如果是的话就跳过该action
             if (fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire) {
                 if (msgDartStatus.dart_launch_process >= 3)
@@ -1138,7 +1131,11 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                         target_angle_with_rounds_ = msgDartProtocols.primary_yaw;
 
             // 读取裁判系统变量，线程安全
+#ifndef CONFIG_SIMULATE_DART_LAUNCH_OPENING_STATUS
             uint8_t dart_launch_opening_status = ext_dart_client_cmd.dart_launch_opening_status;
+#else CONFIG_SIMULATE_DART_LAUNCH_OPENING_STATUS
+            uint8_t dart_launch_opening_status = simulateDartGateState();
+#endif
             uint8_t game_progress = ext_game_status.game_progress;
             uint8_t dart_remaining_time = ext_dart_info.dart_remaining_time;
             uint16_t latest_launch_cmd_time = ext_dart_client_cmd.latest_launch_cmd_time;
@@ -1192,7 +1189,7 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
             // 信号四：遥控器信号 外八字或模拟闸门打开，不要求比赛进行中 要求不在上场模式
             if (((RC_Data.ch0 > 1400 && RC_Data.ch2 < 400) && (!match_flag_)) ||
                 ((RC_Data.ch0 > 1400 && RC_Data.ch2 < 400) && game_progress == 4 && (match_flag_)) ||
-                simulateDartGateState() == E_Gate_State::OPENED){
+                simulateDartGateState() == E_Gate_State::OPENED) {
                 launch_grant_ = true;
                 // 如果是手动发射，则不允许二连发，以防空放
                 if (!match_flag_)
@@ -1204,14 +1201,13 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
 
             // 左摇杆模拟闸门从关闭切换到开启中的信号
             if (simulateDartGateState() == E_Gate_State::OPERATING
-                && last_simulate_launch_opening_status_ == E_Gate_State::CLOSED){
+                && last_simulate_launch_opening_status_ == E_Gate_State::CLOSED) {
                 pre_launch_grant = true;
             }
 
             // 门控 比赛时间不足\准备阶段\自检时\自瞄进行中\选到基地随机移动目标 拒绝发射
             if ((ext_game_status.stage_remain_time < 10 && game_progress == 4) || game_progress == 1 ||
-                game_progress == 2 || game_progress == 3 || game_progress == 5 || target_type == RandomMoving)
-            {
+                game_progress == 2 || game_progress == 3 || game_progress == 5 || target_type == RandomMoving) {
                 launch_grant_ = false;
                 fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = false;
             }
@@ -1229,8 +1225,7 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
 #endif
 
             double base_velocity = 0;
-            if (pre_launch_grant || launch_grant_)
-            {
+            if (pre_launch_grant || launch_grant_) {
                 // 将双装填电机都拉到最下面
                 base_velocity = CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
                 if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ >=
@@ -1242,8 +1237,7 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
             } else {
                 base_velocity = 0;
             }
-            if (launch_grant_)
-            {
+            if (launch_grant_) {
                 dart_mcu_log("Launch granted!");
                 pre_launch_grant = false;
                 fsm.nextAction();
@@ -1264,6 +1258,13 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
 
     class ActionMatch_Launch : public OpenFSMAction {
         void enter(OpenFSM &fsm) const override {
+            // 判断是否一路skip
+            if (msgDartStatus.dart_launch_process >
+                msgDartProtocols.dart_launch_process_offset_end) {
+                fsm.nextAction();
+                return;
+            }
+
             // 比赛状态
             soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_approach));
             fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ = xTaskGetTickCount();
@@ -1296,92 +1297,79 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
             // 通过读取裁判系统变量，获取目标种类
             // 0 : 开局默认/未选定/前哨站 1: 基地固定目标 2: 基地随机固定目标 4: 基地随机移动目标
             uint16_t dart_info = ext_dart_info.dart_info;
-            state_machine:: E_Target_Type target_type = Default;
+            state_machine::E_Target_Type target_type;
             target_type = static_cast<E_Target_Type>((dart_info >> 8) & 0x03);
 
             // Launch里面有几种连续状态：
             // 0: Wait Autoaim 1: Wait stable 2: Downward 3: Upward 4: Trigger 5. Restore Trigger
             double base_velocity = 0;
-            switch (fsm.custom<Dart_FSM>()->ActionMatch_Launch_State)
-            {
-            case 0:
-                // 目标位置
-                if (msgDartProtocols.auto_aim_enabled)
-                {
-                    // TODO: 固定目标不进行自瞄，随即固定目标每次都要自瞄
-                    // TODO:速射——等待自瞄3秒->2秒
-                    if (xTaskGetTickCount() -
-                        fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ < pdMS_TO_TICKS(CONFIG_AUTOAIM_TIMEOUT_MS)
-                        && target_type == E_Target_Type::RandomStationary
-                    )
-                    {
-                        updateAutoAim(msgDartProtocols);
-                    }
-                    else
-                    {
-                        // 按照飞镖专属参数进行发射
+            switch (fsm.custom<Dart_FSM>()->ActionMatch_Launch_State) {
+                case 0:
+                    // 目标位置
+                    if (msgDartProtocols.auto_aim_enabled) {
+                        // TODO: 固定目标不进行自瞄，随即固定目标每次都要自瞄
+                        // TODO:速射——等待自瞄3秒->2秒
+                        if (xTaskGetTickCount() -
+                            fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ < pdMS_TO_TICKS(CONFIG_AUTOAIM_TIMEOUT_MS)
+//                            && target_type == E_Target_Type::RandomStationary
+                                ) {
+                            updateAutoAim(msgDartProtocols);
+                        } else {
+                            // 按照飞镖专属参数进行发射
+                            motor_controller::MotorYawLSController.target_angle_with_rounds_ =
+                                    msgDartProtocols.primary_yaw + msgDartStatus.primary_yaw_offset +
+                                    msgDartProtocols.auxiliary_yaw_offsets[msgDartStatus.dart_launch_process];
+                            fsm.custom<Dart_FSM>()->ActionMatch_Launch_State = 1;
+                            fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ = xTaskGetTickCount();
+                        }
+                    } else {
                         motor_controller::MotorYawLSController.target_angle_with_rounds_ =
-                            msgDartProtocols.primary_yaw + msgDartStatus.primary_yaw_offset +
-                            msgDartProtocols.auxiliary_yaw_offsets[msgDartStatus.dart_launch_process];
+                                msgDartProtocols.primary_yaw +
+                                msgDartProtocols.auxiliary_yaw_offsets[msgDartStatus.dart_launch_process];
                         fsm.custom<Dart_FSM>()->ActionMatch_Launch_State = 1;
                         fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ = xTaskGetTickCount();
                     }
-                }
-                else
-                {
-                    motor_controller::MotorYawLSController.target_angle_with_rounds_ =
-                        msgDartProtocols.primary_yaw +
-                        msgDartProtocols.auxiliary_yaw_offsets[msgDartStatus.dart_launch_process];
-                    fsm.custom<Dart_FSM>()->ActionMatch_Launch_State = 1;
-                    fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ = xTaskGetTickCount();
-                }
-                break;
-            case 1:
-                // TODO: 改成Yaw轴电机稳定
-                // 等待电机稳定
-                if (abs(motor_controller::MotorYawLSController.target_angle_with_rounds_ -
-                    motor_controller::MotorYawLSController.current_angle_with_rounds_) < 50)
-                {
-                    fsm.custom<Dart_FSM>()->ActionMatch_Launch_State = 2;
-                }
-                break;
-            case 2:
-                // 向下运动
+                    break;
+                case 1:
+                    // TODO: 改成Yaw轴电机稳定
+                    // 等待电机稳定
+                    if (abs(motor_controller::MotorYawLSController.target_angle_with_rounds_ -
+                            motor_controller::MotorYawLSController.current_angle_with_rounds_) < 50) {
+                        fsm.custom<Dart_FSM>()->ActionMatch_Launch_State = 2;
+                    }
+                    break;
+                case 2:
+                    // 向下运动
                     // TODO:速射——装填电机速度5000->7000
-                base_velocity = CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
-                if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ >=
-                    CONFIG_MOTOR_LOAD_ANGLE_LAUNCH_DOWN ||
-                    motor_controller::MotorLoadController[1].current_angle_with_rounds_ >=
-                    CONFIG_MOTOR_LOAD_ANGLE_LAUNCH_DOWN)
-                {
-                    meter::velocity_meter.enable();
-                    fsm.custom<Dart_FSM>()->launch_operating_ = true;
-                    soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_launch));
-                    fsm.custom<Dart_FSM>()->ActionMatch_Launch_State = 3;
-                }
-                break;
+                    base_velocity = CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
+                    if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ >=
+                        CONFIG_MOTOR_LOAD_ANGLE_LAUNCH_DOWN ||
+                        motor_controller::MotorLoadController[1].current_angle_with_rounds_ >=
+                        CONFIG_MOTOR_LOAD_ANGLE_LAUNCH_DOWN) {
+                        meter::velocity_meter.enable();
+                        fsm.custom<Dart_FSM>()->launch_operating_ = true;
+                        soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_launch));
+                        fsm.custom<Dart_FSM>()->ActionMatch_Launch_State = 3;
+                    }
+                    break;
 
-            case 3:
-                // 向上运动
-                // TODO:速射——CONFIG_MOTOR_LOAD_ANGLE_UP从115000->55000
-                // TODO:在滑台开裂的情况下测试速射
-                setTriggerServotoTrigger();
-                if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
-                    CONFIG_MOTOR_LOAD_ANGLE_UP)
-                {
-                    base_velocity = -CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD / 5;
-                }
-                else
-                {
-                    base_velocity = -CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD ;
-                }
-                if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
-                    CONFIG_MOTOR_LOAD_ANGLE_LAUNCH_UP ||
-                    motor_controller::MotorLoadController[1].current_angle_with_rounds_ <= -
-                    CONFIG_MOTOR_LOAD_ANGLE_LAUNCH_UP)
-                {
-                    fsm.custom<Dart_FSM>()->ActionMatch_Launch_State = 4;
-                    fsm.custom<Dart_FSM>()->ActionGeneral_Timer0_ = xTaskGetTickCount();
+                case 3:
+                    // 向上运动
+                    // TODO:速射——CONFIG_MOTOR_LOAD_ANGLE_UP从115000->55000
+                    // TODO:在滑台开裂的情况下测试速射
+//                    setTriggerServotoTrigger();
+                    if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
+                        CONFIG_MOTOR_LOAD_ANGLE_UP) {
+                        base_velocity = -CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD / 5;
+                    } else {
+                        base_velocity = -CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
+                    }
+                    if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
+                        CONFIG_MOTOR_LOAD_ANGLE_LAUNCH_UP ||
+                        motor_controller::MotorLoadController[1].current_angle_with_rounds_ <= -
+                                CONFIG_MOTOR_LOAD_ANGLE_LAUNCH_UP) {
+                        fsm.custom<Dart_FSM>()->ActionMatch_Launch_State = 4;
+                        fsm.custom<Dart_FSM>()->ActionGeneral_Timer0_ = xTaskGetTickCount();
 
                         motor_controller::MotorLoadController[0].set_state(
                                 motor_controller::E_PID_Velocity_Angle_Controller_State::OPEN_LOOP);
@@ -1422,10 +1410,6 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
 
         void exit(OpenFSM &fsm) const override {
             msgDartStatus.dart_launch_process++;
-            if (msgDartStatus.dart_launch_process >
-                msgDartProtocols.dart_launch_process_offset_end) {
-                msgDartStatus.dart_launch_process = msgDartProtocols.dart_launch_process_offset_begin;
-            }
             pre_launch_grant = false;
         }
     };
@@ -1434,6 +1418,13 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
     // 拉到底，触发一下装填阻挡舵机，
     class ActionMatch_Reload : public OpenFSMAction {
         void enter(OpenFSM &fsm) const override {
+            // 判断是否一路skip
+            if (msgDartStatus.dart_launch_process >
+                msgDartProtocols.dart_launch_process_offset_end) {
+                fsm.nextAction();
+                return;
+            }
+
             // 比赛状态
             soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_winxp));
             // 重置状态机
@@ -1515,10 +1506,10 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
             uint8_t dart_remaining_time = ext_dart_info.dart_remaining_time;
             uint16_t latest_launch_cmd_time = ext_dart_client_cmd.latest_launch_cmd_time;
             uint16_t dart_info = ext_dart_info.dart_info;
-            state_machine::E_Target_Type target_type = Default;
+            state_machine::E_Target_Type target_type;
             target_type = static_cast<E_Target_Type>((dart_info >> 8) & 0x03);
 
-             // 等待发射信号
+            // 等待发射信号
             // 比赛内开启飞镖闸门就预位准备发射，最速化发射
             bool launch_grant_ = false;
 
@@ -1554,8 +1545,8 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
             // ===== 手动信号域 =====
             // 信号四：遥控器信号 外八字，不要求比赛进行中 要求不在上场模式
             if (((RC_Data.ch0 > 1400 && RC_Data.ch2 < 400) && (!match_flag_)) ||
-            ((RC_Data.ch0 > 1400 && RC_Data.ch2 < 400) && game_progress == 4 && (match_flag_)) ||
-            simulateDartGateState() == E_Gate_State::OPENED) {
+                ((RC_Data.ch0 > 1400 && RC_Data.ch2 < 400) && game_progress == 4 && (match_flag_)) ||
+                simulateDartGateState() == E_Gate_State::OPENED) {
                 launch_grant_ = true;
                 // 如果是手动发射，则不允许二连发，以防空放
                 if (!match_flag_)
@@ -1567,14 +1558,13 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
 
             // 左摇杆模拟闸门从关闭切换到开启中的信号
             if (simulateDartGateState() == E_Gate_State::OPERATING
-                && last_simulate_launch_opening_status_ == E_Gate_State::CLOSED){
+                && last_simulate_launch_opening_status_ == E_Gate_State::CLOSED) {
                 pre_launch_grant = true;
             }
 
             // 门控 比赛时间不足\准备阶段\自检时\自瞄进行中\选到基地随机移动目标 拒绝发射
             if ((ext_game_status.stage_remain_time < 10 && game_progress == 4) || game_progress == 1 ||
-                game_progress == 2 || game_progress == 3 || game_progress == 5 || target_type == RandomMoving)
-            {
+                game_progress == 2 || game_progress == 3 || game_progress == 5 || target_type == RandomMoving) {
                 launch_grant_ = false;
                 fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = false;
             }
@@ -1584,99 +1574,89 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
 
             double base_velocity = 0;
             // 升降机控制
-            switch (fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reload_State)
-            {
-            case 0:
-                // 触发升降机
-                if (xTaskGetTickCount() - fsm.custom<Dart_FSM>()->ActionGeneral_Timer3_ >
-                    pdMS_TO_TICKS(CONFIG_LAUNCH_WAIT_TIME))
-                    fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reload_State = 1;
-                break;
-            case 1:
-                // 装填电机向下运动到装填位置
-                base_velocity = CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
-                if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ >=
-                    CONFIG_MOTOR_LOAD_ANGLE_DOWN |
-                    motor_controller::MotorLoadController[1].current_angle_with_rounds_ >=
-                    CONFIG_MOTOR_LOAD_ANGLE_DOWN)
-                {
-                    fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reload_State = 2;
-                    fsm.custom<Dart_FSM>()->ActionGeneral_Timer0_ = xTaskGetTickCount();
-                    setLoadServotoDOWN();
-                    setTriggerServotoTrigger();
-                }
-                break;
-            case 2:
-                // 降下升降机并等待时间到达
-                if (xTaskGetTickCount() - fsm.custom<Dart_FSM>()->ActionGeneral_Timer0_ >
-                    pdMS_TO_TICKS(CONFIG_LIFT_WAIT_TIME))
-                {
-                    fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reload_State = 3;
-                }
-                break;
-            case 3:
-                base_velocity = -(CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD);
-            // 装填电机向上运动到中间位置
-                if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
-                    CONFIG_MOTOR_LOAD_ANGLE_POST_LOAD |
-                    motor_controller::MotorLoadController[1].current_angle_with_rounds_ <=
-                    CONFIG_MOTOR_LOAD_ANGLE_POST_LOAD)
-                {
-                    fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reload_State = 4;
-                    setLoadServotoUP();
-                    setTriggerServotoReload();
-                    fsm.custom<Dart_FSM>()->ActionGeneral_Timer0_ = xTaskGetTickCount();
-                }
-                break;
-            case 4:
-                // 再等一小段时间等待升降机复位
-                // TODO:速射——CONFIG_LIFT_WAIT_TIME从1秒->0.7秒
-                if (xTaskGetTickCount() - fsm.custom<Dart_FSM>()->ActionGeneral_Timer0_ >
-                    pdMS_TO_TICKS(CONFIG_LIFT_WAIT_TIME))
-                {
-                    setSlidedownServotoSlide();
-                    fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ = xTaskGetTickCount();
-                    fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reload_State = 5;
-                }
-                break;
-            case 5:
-                // TODO:速射——升降机复位后触发下滑，节省时间
-                if (xTaskGetTickCount() - fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ >
-                    pdMS_TO_TICKS(CONFIG_SLIDE_SERVO_WAIT_TIME))
-                {
-                    setSlidedownServotoCut();
-                }
-
-                // 同时将装填电机往下拉，进一步节省时间
-                if (pre_launch_grant || launch_grant_)
-                {
+            switch (fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reload_State) {
+                case 0:
+                    // 触发升降机
+                    if (xTaskGetTickCount() - fsm.custom<Dart_FSM>()->ActionGeneral_Timer3_ >
+                        pdMS_TO_TICKS(CONFIG_LAUNCH_WAIT_TIME))
+                        fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reload_State = 1;
+                    break;
+                case 1:
+                    // 装填电机向下运动到装填位置
                     base_velocity = CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
                     if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ >=
-                        CONFIG_MOTOR_LOAD_ANGLE_LAUNCH_DOWN ||
+                        CONFIG_MOTOR_LOAD_ANGLE_DOWN |
                         motor_controller::MotorLoadController[1].current_angle_with_rounds_ >=
-                        CONFIG_MOTOR_LOAD_ANGLE_LAUNCH_DOWN)
-                    {
-                        base_velocity = 0;
+                        CONFIG_MOTOR_LOAD_ANGLE_DOWN) {
+                        fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reload_State = 2;
+                        fsm.custom<Dart_FSM>()->ActionGeneral_Timer0_ = xTaskGetTickCount();
+                        setLoadServotoDOWN();
+                        setTriggerServotoTrigger();
                     }
-                }else
-                {
-                    base_velocity = -CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
+                    break;
+                case 2:
+                    // 降下升降机并等待时间到达
+                    if (xTaskGetTickCount() - fsm.custom<Dart_FSM>()->ActionGeneral_Timer0_ >
+                        pdMS_TO_TICKS(CONFIG_LIFT_WAIT_TIME)) {
+                        fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reload_State = 3;
+                    }
+                    break;
+                case 3:
+                    base_velocity = -(CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD);
+                    // 装填电机向上运动到中间位置
                     if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
-                        CONFIG_MOTOR_LOAD_ANGLE_UP ||
+                        CONFIG_MOTOR_LOAD_ANGLE_POST_LOAD |
                         motor_controller::MotorLoadController[1].current_angle_with_rounds_ <=
-                        CONFIG_MOTOR_LOAD_ANGLE_UP)
-                    {
-                        base_velocity = 0;
+                        CONFIG_MOTOR_LOAD_ANGLE_POST_LOAD) {
+                        fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reload_State = 4;
+                        setLoadServotoUP();
+                        setTriggerServotoReload();
+                        fsm.custom<Dart_FSM>()->ActionGeneral_Timer0_ = xTaskGetTickCount();
                     }
-                }
+                    break;
+                case 4:
+                    // 再等一小段时间等待升降机复位
+                    // TODO:速射——CONFIG_LIFT_WAIT_TIME从1秒->0.7秒
+                    if (xTaskGetTickCount() - fsm.custom<Dart_FSM>()->ActionGeneral_Timer0_ >
+                        pdMS_TO_TICKS(CONFIG_LIFT_WAIT_TIME)) {
+                        setSlidedownServotoSlide();
+                        fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ = xTaskGetTickCount();
+                        fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reload_State = 5;
+                    }
+                    break;
+                case 5:
+                    // TODO:速射——升降机复位后触发下滑，节省时间
+                    if (xTaskGetTickCount() - fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ >
+                        pdMS_TO_TICKS(CONFIG_SLIDE_SERVO_WAIT_TIME)) {
+                        setSlidedownServotoCut();
+                    }
 
-                // 等待电机到位再进入ActionMatch_Wait
-                if (xTaskGetTickCount() - fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ >
-                    pdMS_TO_TICKS(CONFIG_SLIDE_SERVO_SLIDE_TIME))
-                    fsm.nextAction();
-                break;
-            default:
-                break;
+                    // 同时将装填电机往下拉，进一步节省时间
+                    if (pre_launch_grant || launch_grant_) {
+                        base_velocity = CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
+                        if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ >=
+                            CONFIG_MOTOR_LOAD_ANGLE_LAUNCH_DOWN ||
+                            motor_controller::MotorLoadController[1].current_angle_with_rounds_ >=
+                            CONFIG_MOTOR_LOAD_ANGLE_LAUNCH_DOWN) {
+                            base_velocity = 0;
+                        }
+                    } else {
+                        base_velocity = -CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
+                        if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
+                            CONFIG_MOTOR_LOAD_ANGLE_UP ||
+                            motor_controller::MotorLoadController[1].current_angle_with_rounds_ <=
+                            CONFIG_MOTOR_LOAD_ANGLE_UP) {
+                            base_velocity = 0;
+                        }
+                    }
+
+                    // 等待电机到位再进入ActionMatch_Wait
+                    if (xTaskGetTickCount() - fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ >
+                        pdMS_TO_TICKS(CONFIG_SLIDE_SERVO_SLIDE_TIME))
+                        fsm.nextAction();
+                    break;
+                default:
+                    break;
             }
 
             // 设置Load电机速度
@@ -1699,8 +1679,11 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
         }
 
         void update(OpenFSM &fsm) const override {
-            motor::MotorLoad[0].setNextState(motor::E_MotorState::IDLE);
-            motor::MotorLoad[1].setNextState(motor::E_MotorState::IDLE);
+            motor::MotorLoad[0].setNextState(motor::E_MotorState::RUNNING);
+            motor::MotorLoad[1].setNextState(motor::E_MotorState::RUNNING);
+
+            motor_controller::MotorLoadController[0].target_velocity_ = 0;
+            motor_controller::MotorLoadController[1].target_velocity_ = 0;
             setNextStateByRemote(false, true);
         }
 
@@ -1731,7 +1714,7 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                                        "ActionMatch_Reload", "ActionMatch_Wait", "ActionMatch_Launch",
                                        "ActionMatch_Reload", "ActionMatch_Wait", "ActionMatch_Launch",
                                        "ActionMatch_Reload", "ActionMatch_Wait", "ActionMatch_Launch",
-                                             "ActionMatch_Exit"
+                                       "ActionMatch_Exit"
                                },
                                E_Dart_State::Match);
 
