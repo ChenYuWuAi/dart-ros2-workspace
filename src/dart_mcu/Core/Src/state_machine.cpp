@@ -304,7 +304,7 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
      */
     template<typename T>
     E_ResetActionReturnState
-    actionResetLSUntilTrigger(motor_controller::pid_angle_velocity_controller <T> &pid,
+    actionResetLSUntilTrigger(motor_controller::pid_angle_velocity_controller<T> &pid,
                               E_Lead_Screw_Switch_State &triggerFlag,
                               int16_t target_reset_velocity) {
         if (pid.motor_->motor_state_ == motor::E_MotorState::DISCONNECTED) {
@@ -1125,10 +1125,6 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                     msgDartProtocols.primary_force + msgDartProtocols.primary_force_offset +
                     msgDartProtocols.auxiliary_force_offsets[msgDartStatus.dart_launch_process];
 
-            // 判断是否更新自瞄
-            if (!updateAutoAim(msgDartProtocols) && !msgDartProtocols.auto_aim_enabled)
-                motor_controller::MotorYawLSController.
-                        target_angle_with_rounds_ = msgDartProtocols.primary_yaw;
 
             // 读取裁判系统变量，线程安全
 #ifndef CONFIG_SIMULATE_DART_LAUNCH_OPENING_STATUS
@@ -1143,12 +1139,25 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
             state_machine::E_Target_Type target_type = Default;
             target_type = static_cast<E_Target_Type>((dart_info >> 8) & 0x03);
 
+            // 判断是否更新自瞄
+            if (game_progress == 2 || game_progress == 3) {
+                // TODO: 取消自瞄失败的清零行为
+                updateAutoAim(msgDartProtocols);
+            }
+            else {
+                if(dart_launch_opening_status != E_Gate_State::CLOSED || match_flag_ == 0)
+                    updateAutoAim(msgDartProtocols);
+            }
+
             // 准备阶段结束的时候，将自瞄值offsets更新到primary内
             if (fsm.custom<Dart_FSM>()->ActionMatch_Wait_last_game_progress == 2 &&
                 game_progress == 3) {
                 msgDartProtocols.primary_yaw = msgDartProtocols.primary_yaw + msgDartStatus.primary_yaw_offset;
                 // 重置自瞄控制器
                 motor_controller::AutoAimController.reset();
+                msgDartStatus.primary_yaw_offset = 0;
+                motor_controller::MotorYawLSController.target_angle_with_rounds_ =
+                        msgDartProtocols.primary_yaw;
                 msgDartProtocols.last_param_update_time = rmw_uros_epoch_millis();
             }
 
@@ -1167,9 +1176,9 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                                  dart_launch_opening_status == E_Gate_State::OPERATING &&
                                  game_progress == 4);
 
-            // 信号二：飞镖发射剩余时间变化，时间落在15s内，而且比赛进行中
-            launch_grant_ |= (dart_remaining_time > 0 &&
-                              dart_remaining_time <= 15 &&
+            // 信号二：飞镖发射剩余时间变化，时间落在20s内，而且比赛进行中
+            launch_grant_ |= (dart_remaining_time > 2 &&
+                              dart_remaining_time <= 20 &&
                               game_progress == 4);
 
             // 信号三：选手端手动发送触发
@@ -1188,8 +1197,7 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
             // ===== 手动信号域 =====
             // 信号四：遥控器信号 外八字或模拟闸门打开，不要求比赛进行中 要求不在上场模式
             if (((RC_Data.ch0 > 1400 && RC_Data.ch2 < 400) && (!match_flag_)) ||
-                ((RC_Data.ch0 > 1400 && RC_Data.ch2 < 400) && game_progress == 4 && (match_flag_)) ||
-                simulateDartGateState() == E_Gate_State::OPENED) {
+                ((RC_Data.ch0 > 1400 && RC_Data.ch2 < 400) && game_progress == 4 && (match_flag_))) {
                 launch_grant_ = true;
                 // 如果是手动发射，则不允许二连发，以防空放
                 if (!match_flag_)
@@ -1199,22 +1207,15 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                     fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = true;
             }
 
-            // 左摇杆模拟闸门从关闭切换到开启中的信号
-            if (simulateDartGateState() == E_Gate_State::OPERATING
-                && last_simulate_launch_opening_status_ == E_Gate_State::CLOSED) {
-                pre_launch_grant = true;
-            }
-
             // 门控 比赛时间不足\准备阶段\自检时\自瞄进行中\选到基地随机移动目标 拒绝发射
-            if ((ext_game_status.stage_remain_time < 10 && game_progress == 4) || game_progress == 1 ||
-                game_progress == 2 || game_progress == 3 || game_progress == 5 || target_type == RandomMoving) {
+            if (((ext_game_status.stage_remain_time < 4 || dart_remaining_time < 3) && game_progress == 4) ||
+                game_progress == 1 ||
+                game_progress == 2 || game_progress == 3 || game_progress == 5) {
                 launch_grant_ = false;
                 fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = false;
             }
 
             last_dart_launch_opening_status_ = dart_launch_opening_status;
-            last_simulate_launch_opening_status_ = simulateDartGateState();
-
 
 #if CONFIG_FORCE_WAIT_FOR_GAME_PROGRESS == 1
             if (ext_game_status.game_progress != 4) {

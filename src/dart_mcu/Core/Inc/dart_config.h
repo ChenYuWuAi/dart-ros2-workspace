@@ -76,6 +76,8 @@
 // 队列长度
 #define LOG_QUEUE_LEN 10
 
+#define CONFIG_SIMULATE_DART_LAUNCH_OPENING_STATUS
+
 extern dart_msgs__msg__DartLauncherParams msgDartParams;
 extern dart_msgs__msg__DartLauncherParams msgDartProtocols;
 extern dart_msgs__msg__GreenLight msgGreenLight;
