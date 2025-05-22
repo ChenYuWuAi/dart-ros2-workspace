@@ -289,7 +289,7 @@ bool create_entities() {
             RCL_MS_TO_NS(timer_logger_timeout),
             timer_logger_callback, true));
 
-    const unsigned int timer2_timeout = 10;
+    const unsigned int timer2_timeout = 100;
     RCCHECK(rclc_timer_init_default2(
             &timer_status_update,
             &support,
