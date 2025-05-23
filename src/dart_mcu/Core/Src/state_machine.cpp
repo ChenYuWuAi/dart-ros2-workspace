@@ -1677,6 +1677,7 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
         void enter(OpenFSM &fsm) const override {
             // 所有飞镖都已经打完，执行严格保护以防止空放，等待遥控模式解除此动作
             soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_laoda));
+            msgDartStatus.dart_state = dart_fsm.openFSM_.focusEState() + 4;
         }
 
         void update(OpenFSM &fsm) const override {
