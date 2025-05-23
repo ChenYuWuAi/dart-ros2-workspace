@@ -40,7 +40,7 @@ endif()
 
 # ========== Options ==========
 
-# ========== General Dependencies ==========
+# ========== General Dependencies =========
 # json and lvgl
 add_subdirectory(thirdparty)
 find_package(ament_cmake REQUIRED)
@@ -74,21 +74,25 @@ ament_target_dependencies(node_dart_param_gateway rclcpp std_msgs dart_msgs std_
 add_executable(node_dart_launcher_lifecycle src/node_dart_launcher_lifecycle.cpp)
 ament_target_dependencies(node_dart_launcher_lifecycle rclcpp std_msgs dart_msgs std_srvs std_msgs lifecycle_msgs rclcpp_lifecycle)
 # Add node_dart_app target
-# add_executable(node_dart_app src/node_dart_app.cpp src/get_ip.cpp src/dart_config.cpp src/dart_algorithm.cpp)
-# ament_target_dependencies(node_dart_app rclcpp std_msgs dart_msgs std_srvs sensor_msgs cv_bridge)
+add_executable(node_dart_app src/node_dart_app.cpp src/get_ip.cpp)
+ament_target_dependencies(node_dart_app rclcpp std_msgs dart_msgs std_srvs sensor_msgs cv_bridge)
 
-# # Add Lvgl support
-# target_include_directories(node_dart_app PRIVATE
-#     ${PROJECT_SOURCE_DIR}
-#     include
-#     src/generated src/custom src/generated/guider_customer_fonts src/generated/guider_fonts src/generated/images
-#     ${OpenCV_INCLUDE_DIRS}
-#     lvgl/include/lvgl
-# )
+# Add Lvgl OpenCV
+target_include_directories(node_dart_app PRIVATE
+    ${PROJECT_SOURCE_DIR}
+    include
+    thirdparty/dart-ui/generated thirdparty/dart-ui/custom thirdparty/dart-ui/generated/guider_customer_fonts thirdparty/dart-ui/generated/guider_fonts thirdparty/dart-ui/generated/images
+    ${OpenCV_INCLUDE_DIRS}
+)
 
 # # 递归添加子目录${PROJECT_SOURCE_DIR}/generated/*
-# FILE(GLOB_RECURSE SOURCES src/custom/*.c src/custom/*.cpp /src/dart_config.cpp)
-# target_sources(node_dart_app PRIVATE ${SOURCES})
+FILE(GLOB_RECURSE SOURCES thirdparty/dart-ui/custom/*.c thirdparty/dart-ui/custom/*.cpp
+    thirdparty/dart-ui/generated/*.c thirdparty/dart-ui/generated/*.cpp
+    thirdparty/dart-ui/generated/guider_customer_fonts/*.c thirdparty/dart-ui/generated/guider_customer_fonts/*.cpp
+    thirdparty/dart-ui/generated/guider_fonts/*.c thirdparty/dart-ui/generated/guider_fonts/*.cpp
+    thirdparty/dart-ui/generated/images/*.c thirdparty/dart-ui/generated/images/*.cpp
+)
+target_sources(node_dart_app PRIVATE ${SOURCES})
 # target_link_directories(node_dart_app PRIVATE lvgl/lib src/generated/lib)
 
 # if(BUILD_SHARED_LIBS)
