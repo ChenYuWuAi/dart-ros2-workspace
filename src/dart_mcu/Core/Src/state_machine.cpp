@@ -2,7 +2,6 @@
 // Created by cheny on 24-9-18.
 //
 
-// TODO: 准备阶段进行自瞄，随后将自瞄结果从offset存到primary，在launch时测算移动靶偏移量
 
 #include "state_machine.h"
 
@@ -130,7 +129,6 @@ do{                        \
 trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
 }while(0)
 
-    // TODO: 增加ActionMatch_End，防止速射后空放
 #define simulateDartGateState() \
 (RC_Data.Switch_Left == RC_SW_UP ? E_Gate_State::CLOSED : \
 (RC_Data.Switch_Left == RC_SW_MID ? E_Gate_State::OPERATING : \
@@ -141,7 +139,6 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
 
     // 裁判系统判定Flag
     uint8_t last_dart_launch_opening_status_ = 0; // 上一次发射状态
-    uint8_t last_simulate_launch_opening_status_ = 0; // 上一次模拟发射状态
     uint16_t last_dart_launch_time_ = 0; // 上一次发射指令下达时间
     bool match_flag_ = 0; // 上场比赛判断 若已经上场则执行最严格的安全措施
     bool pre_launch_grant = false;
@@ -576,7 +573,7 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
         }
     };
 
-    bool updateAutoAim(dart_msgs__msg__DartLauncherParams &msgDartParams_) {
+    bool updateAutoAim(dart_msgs__msg__DartLauncherParams &msgDartParams_, bool reset_when_miss_target = true) {
         static uint8_t no_autoaim_count = 0;
         static TickType_t last_autoaim_update_tick = 0;
         if (xTaskGetTickCount() - last_autoaim_update_tick > 33) { // 30 fps
@@ -594,7 +591,7 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                             msgDartParams_.primary_yaw + msgDartStatus.primary_yaw_offset;
 
                     return true;
-                } else {
+                } else if(reset_when_miss_target){
                     no_autoaim_count++;
                     if (no_autoaim_count > 30) {
                         motor_controller::MotorYawLSController.target_angle_with_rounds_ =
@@ -603,7 +600,8 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                         motor_controller::AutoAimController.reset();
                     }
                     return false;
-                }
+                }else
+                    return false;
             }
         }
         return false;
@@ -1090,14 +1088,12 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
 
             // 判断是否连续发射，如果是的话就跳过该action
             if (fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire) {
-                if (msgDartStatus.dart_launch_process >= 3)
+                if (msgDartStatus.dart_launch_process >= 2)
                     fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = false;
                 soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_winxp));
                 fsm.nextAction();
                 return;
             }
-
-            last_simulate_launch_opening_status_ = E_Gate_State::OPENED;
 
             motor_controller::MotorLoadSyncController.reset();
 
@@ -1142,7 +1138,7 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
             // 判断是否更新自瞄
             if (game_progress == 2 || game_progress == 3) {
                 // TODO: 取消自瞄失败的清零行为
-                updateAutoAim(msgDartProtocols);
+                updateAutoAim(msgDartProtocols, false);
             }
             else {
                 if(dart_launch_opening_status != E_Gate_State::CLOSED || match_flag_ == 0)
@@ -1180,6 +1176,8 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
             launch_grant_ |= (dart_remaining_time > 2 &&
                               dart_remaining_time <= 20 &&
                               game_progress == 4);
+            // TODO: 真正比赛删掉,因为信号二在没有官方闸门的情况下无效
+            launch_grant_ |= dart_launch_opening_status == E_Gate_State::OPENED;
 
             // 信号三：选手端手动发送触发
             // 比赛状态确认
@@ -1190,7 +1188,7 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                 launch_grant_ = true;
             }
 
-            // 自动信号触发时均要求二连发
+            // 自动信号触发时均要求连发
             if (launch_grant_)
                 fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = true;
 
@@ -1207,10 +1205,13 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                     fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = true;
             }
 
-            // 门控 比赛时间不足\准备阶段\自检时\自瞄进行中\选到基地随机移动目标 拒绝发射
-            if (((ext_game_status.stage_remain_time < 4 || dart_remaining_time < 3) && game_progress == 4) ||
-                game_progress == 1 ||
-                game_progress == 2 || game_progress == 3 || game_progress == 5) {
+            // 门控 比赛时间不足\准备阶段\自检时\自瞄进行中\选到基地随机移动目标\闸门不是打开状态 拒绝发射
+            if ((
+                // TODO:在真正比赛时恢复时间判断逻辑
+// (ext_game_status.stage_remain_time < 4 || dart_remaining_time < 3) && game_progress == 4) ||
+                game_progress == 1 ||game_progress == 2 ||
+                game_progress == 3 || game_progress == 5)
+                || dart_launch_opening_status != E_Gate_State::OPENED){
                 launch_grant_ = false;
                 fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = false;
             }
@@ -1239,9 +1240,21 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                 base_velocity = 0;
             }
             if (launch_grant_) {
-                dart_mcu_log("Launch granted!");
                 pre_launch_grant = false;
                 fsm.nextAction();
+            }
+
+            if (pre_launch_grant)
+            {
+                char msg1[40];
+                sprintf(msg1, "dart_launch_process: %d, pre_launch_grant in wait", msgDartStatus.dart_launch_process);
+                dart_mcu_log(msg1);
+            }
+            if (launch_grant_)
+            {
+                char msg2[40];
+                sprintf(msg2, "dart_launch_process: %d, launch_grant in wait", msgDartStatus.dart_launch_process);
+                dart_mcu_log(msg2);
             }
 
             // 设置Load电机速度
@@ -1308,8 +1321,6 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                 case 0:
                     // 目标位置
                     if (msgDartProtocols.auto_aim_enabled) {
-                        // TODO: 固定目标不进行自瞄，随即固定目标每次都要自瞄
-                        // TODO:速射——等待自瞄3秒->2秒
                         if (xTaskGetTickCount() -
                             fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ < pdMS_TO_TICKS(CONFIG_AUTOAIM_TIMEOUT_MS)
 //                            && target_type == E_Target_Type::RandomStationary
@@ -1332,7 +1343,6 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                     }
                     break;
                 case 1:
-                    // TODO: 改成Yaw轴电机稳定
                     // 等待电机稳定
                     if (abs(motor_controller::MotorYawLSController.target_angle_with_rounds_ -
                             motor_controller::MotorYawLSController.current_angle_with_rounds_) < 50) {
@@ -1341,7 +1351,6 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                     break;
                 case 2:
                     // 向下运动
-                    // TODO:速射——装填电机速度5000->7000
                     base_velocity = CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
                     if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ >=
                         CONFIG_MOTOR_LOAD_ANGLE_LAUNCH_DOWN ||
@@ -1356,9 +1365,8 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
 
                 case 3:
                     // 向上运动
-                    // TODO:速射——CONFIG_MOTOR_LOAD_ANGLE_UP从115000->55000
-                    // TODO:在滑台开裂的情况下测试速射
-//                    setTriggerServotoTrigger();
+                    // TODO:在不扣扳机的情况下测试,需要时应注释掉
+                    // setTriggerServotoTrigger();
                     if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
                         CONFIG_MOTOR_LOAD_ANGLE_UP) {
                         base_velocity = -CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD / 5;
@@ -1401,6 +1409,17 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                 default:
                     fsm.custom<Dart_FSM>()->ActionMatch_Launch_State = 0;
             }
+
+            if (pre_launch_grant)
+            {
+                char msg1[40];
+                sprintf(msg1, "dart_launch_process: %d, pre_launch_grant in launch", msgDartStatus.dart_launch_process);
+                dart_mcu_log(msg1);
+            }
+
+                char msg2[40];
+                sprintf(msg2, "dart_launch_process: %d, already enter launch", msgDartStatus.dart_launch_process);
+                dart_mcu_log(msg2);
 
             // 设置Load电机速度
             motor_controller::MotorLoadController[0].target_velocity_ =
@@ -1502,7 +1521,11 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
             // }
 
             // 读取裁判系统变量，线程安全
+#ifndef CONFIG_SIMULATE_DART_LAUNCH_OPENING_STATUS
             uint8_t dart_launch_opening_status = ext_dart_client_cmd.dart_launch_opening_status;
+#else CONFIG_SIMULATE_DART_LAUNCH_OPENING_STATUS
+            uint8_t dart_launch_opening_status = simulateDartGateState();
+#endif
             uint8_t game_progress = ext_game_status.game_progress;
             uint8_t dart_remaining_time = ext_dart_info.dart_remaining_time;
             uint16_t latest_launch_cmd_time = ext_dart_client_cmd.latest_launch_cmd_time;
@@ -1529,6 +1552,8 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
             launch_grant_ |= (dart_remaining_time > 0 &&
                               dart_remaining_time <= 15 &&
                               game_progress == 4);
+            // TODO: 真正比赛删掉,因为信号二在没有官方闸门的情况下无效
+            launch_grant_ |= dart_launch_opening_status == E_Gate_State::OPENED;
 
             // 信号三：选手端手动发送触发
             // 比赛状态确认
@@ -1546,8 +1571,7 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
             // ===== 手动信号域 =====
             // 信号四：遥控器信号 外八字，不要求比赛进行中 要求不在上场模式
             if (((RC_Data.ch0 > 1400 && RC_Data.ch2 < 400) && (!match_flag_)) ||
-                ((RC_Data.ch0 > 1400 && RC_Data.ch2 < 400) && game_progress == 4 && (match_flag_)) ||
-                simulateDartGateState() == E_Gate_State::OPENED) {
+                ((RC_Data.ch0 > 1400 && RC_Data.ch2 < 400) && game_progress == 4 && (match_flag_))) {
                 launch_grant_ = true;
                 // 如果是手动发射，则不允许二连发，以防空放
                 if (!match_flag_)
@@ -1557,21 +1581,15 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                     fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = true;
             }
 
-            // 左摇杆模拟闸门从关闭切换到开启中的信号
-            if (simulateDartGateState() == E_Gate_State::OPERATING
-                && last_simulate_launch_opening_status_ == E_Gate_State::CLOSED) {
-                pre_launch_grant = true;
-            }
-
-            // 门控 比赛时间不足\准备阶段\自检时\自瞄进行中\选到基地随机移动目标 拒绝发射
+            // 门控 比赛时间不足\准备阶段\自检时\自瞄进行中\闸门不在打开状态 拒绝发射
             if ((ext_game_status.stage_remain_time < 10 && game_progress == 4) || game_progress == 1 ||
-                game_progress == 2 || game_progress == 3 || game_progress == 5 || target_type == RandomMoving) {
+                game_progress == 2 || game_progress == 3 || game_progress == 5 ||
+                dart_launch_opening_status != E_Gate_State::OPENED) {
                 launch_grant_ = false;
                 fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = false;
             }
 
             last_dart_launch_opening_status_ = dart_launch_opening_status;
-            last_simulate_launch_opening_status_ = simulateDartGateState();
 
             double base_velocity = 0;
             // 升降机控制
@@ -1617,7 +1635,6 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                     break;
                 case 4:
                     // 再等一小段时间等待升降机复位
-                    // TODO:速射——CONFIG_LIFT_WAIT_TIME从1秒->0.7秒
                     if (xTaskGetTickCount() - fsm.custom<Dart_FSM>()->ActionGeneral_Timer0_ >
                         pdMS_TO_TICKS(CONFIG_LIFT_WAIT_TIME)) {
                         setSlidedownServotoSlide();
@@ -1626,7 +1643,7 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                     }
                     break;
                 case 5:
-                    // TODO:速射——升降机复位后触发下滑，节省时间
+                    // 降机复位后触发下滑，节省时间
                     if (xTaskGetTickCount() - fsm.custom<Dart_FSM>()->ActionGeneral_Timer1_ >
                         pdMS_TO_TICKS(CONFIG_SLIDE_SERVO_WAIT_TIME)) {
                         setSlidedownServotoCut();
@@ -1641,7 +1658,7 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                             CONFIG_MOTOR_LOAD_ANGLE_LAUNCH_DOWN) {
                             base_velocity = 0;
                         }
-                    } else {
+                    } else { // 下一次不发射的时候装填电机往上拉
                         base_velocity = -CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
                         if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
                             CONFIG_MOTOR_LOAD_ANGLE_UP ||
@@ -1660,6 +1677,19 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                     break;
             }
 
+            if (pre_launch_grant)
+            {
+                char msg1[40];
+                sprintf(msg1, "dart_launch_process: %d, pre_launch_grant in reload", msgDartStatus.dart_launch_process);
+                dart_mcu_log(msg1);
+            }
+            if (launch_grant_)
+            {
+                char msg2[40];
+                sprintf(msg2, "dart_launch_process: %d, launch_grant in reload", msgDartStatus.dart_launch_process);
+                dart_mcu_log(msg2);
+            }
+
             // 设置Load电机速度
             motor_controller::MotorLoadController[0].target_velocity_ =
                     base_velocity + motor_controller::MotorLoadSyncController.output;
@@ -1672,11 +1702,11 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
         }
     };
 
-    // TODO: 增加ActionMatch_End，防止速射后空放
     class ActionMatch_Exit : public OpenFSMAction {
         void enter(OpenFSM &fsm) const override {
             // 所有飞镖都已经打完，执行严格保护以防止空放，等待遥控模式解除此动作
             soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_laoda));
+            msgDartStatus.dart_state = dart_fsm.openFSM_.focusEState() + 4;
         }
 
         void update(OpenFSM &fsm) const override {
