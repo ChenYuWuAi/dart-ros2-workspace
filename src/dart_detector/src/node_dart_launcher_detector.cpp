@@ -1,4 +1,8 @@
 #include <node_launcher_detector.hpp>
+#include <fstream>
+#include <sys/stat.h>
+#include <cerrno>
+#include <cstring>
 
 using namespace std::chrono_literals;
 using namespace CameraHAL;
@@ -7,6 +11,19 @@ void NodeDartLauncherDetector::camera_thread(std::shared_ptr<CameraDriver> camer
 {
     RCLCPP_INFO(this->get_logger(), "Starting thread for %s camera...", camera_name.c_str());
 
+    // 重置相机失败计数器
+    if (camera_name == "lccv") {
+        lccv_failure_count_ = 0;
+        lccv_working_ = false;
+    } else if (camera_name == "dh") {
+        dh_failure_count_ = 0;
+        dh_working_ = false;
+    }
+    
+    // 获取相机看门狗阈值（连续失败多少次触发重启）
+    int watchdog_threshold = this->has_parameter("camera_watchdog.failure_threshold") ? 
+                            this->get_parameter("camera_watchdog.failure_threshold").as_int() : 30;
+    
     int width = this->has_parameter(camera_name + ".image_width") ? this->get_parameter(camera_name + ".image_width").as_int() : 1280;
     int height = this->has_parameter(camera_name + ".image_height") ? this->get_parameter(camera_name + ".image_height").as_int() : 1024;
     int width_resized = this->has_parameter(camera_name + ".image_resized_width") ? this->get_parameter(camera_name + ".image_resized_width").as_int() : 640;
@@ -38,9 +55,41 @@ void NodeDartLauncherDetector::camera_thread(std::shared_ptr<CameraDriver> camer
             if (!camera->read(image))
             {
                 RCLCPP_WARN(this->get_logger(), "Failed to read image from %s camera", camera_name.c_str());
+                
+                // 增加失败计数
+                if (camera_name == "lccv") {
+                    lccv_failure_count_++;
+                    lccv_working_ = false;
+                    RCLCPP_DEBUG(this->get_logger(), "LCCV camera failure count: %d", lccv_failure_count_.load());
+                    if (lccv_failure_count_ >= watchdog_threshold && camera_watchdog_active_) {
+                        RCLCPP_ERROR(this->get_logger(), "LCCV camera failure threshold reached, triggering node restart");
+                        try_restart_node();
+                        return;  // 退出线程
+                    }
+                } else if (camera_name == "dh") {
+                    dh_failure_count_++;
+                    dh_working_ = false;
+                    RCLCPP_DEBUG(this->get_logger(), "DH camera failure count: %d", dh_failure_count_.load());
+                    if (dh_failure_count_ >= watchdog_threshold && camera_watchdog_active_) {
+                        RCLCPP_ERROR(this->get_logger(), "DH camera failure threshold reached, triggering node restart");
+                        try_restart_node();
+                        return;  // 退出线程
+                    }
+                }
+                
                 std::this_thread::sleep_for(16ms);
                 continue;
             }
+            
+            // 重置失败计数
+            if (camera_name == "lccv") {
+                lccv_failure_count_ = 0;
+                lccv_working_ = true;
+            } else if (camera_name == "dh") {
+                dh_failure_count_ = 0;
+                dh_working_ = true;
+            }
+            
             RCLCPP_DEBUG(this->get_logger(), "Image read successfully from %s camera", camera_name.c_str());
             auto start_time = std::chrono::steady_clock::now();
 
@@ -130,6 +179,28 @@ void NodeDartLauncherDetector::camera_thread(std::shared_ptr<CameraDriver> camer
                 if (!camera->read(image))
                 {
                     RCLCPP_WARN(this->get_logger(), "Failed to read image from %s camera", camera_name.c_str());
+                    
+                    // 增加失败计数
+                    if (camera_name == "lccv") {
+                        lccv_failure_count_++;
+                        lccv_working_ = false;
+                        RCLCPP_DEBUG(this->get_logger(), "LCCV camera failure count: %d", lccv_failure_count_.load());
+                        if (lccv_failure_count_ >= watchdog_threshold && camera_watchdog_active_) {
+                            RCLCPP_ERROR(this->get_logger(), "LCCV camera failure threshold reached, triggering node restart");
+                            try_restart_node();
+                            return;  // 退出线程
+                        }
+                    } else if (camera_name == "dh") {
+                        dh_failure_count_++;
+                        dh_working_ = false;
+                        RCLCPP_DEBUG(this->get_logger(), "DH camera failure count: %d", dh_failure_count_.load());
+                        if (dh_failure_count_ >= watchdog_threshold && camera_watchdog_active_) {
+                            RCLCPP_ERROR(this->get_logger(), "DH camera failure threshold reached, triggering node restart");
+                            try_restart_node();
+                            return;  // 退出线程
+                        }
+                    }
+                    
                     std::this_thread::sleep_for(16ms);
                     continue;
                 }
@@ -137,8 +208,37 @@ void NodeDartLauncherDetector::camera_thread(std::shared_ptr<CameraDriver> camer
             catch (const std::exception &e)
             {
                 RCLCPP_ERROR(this->get_logger(), "Exception while reading image from %s camera: %s", camera_name.c_str(), e.what());
+                
+                // 增加失败计数
+                if (camera_name == "lccv") {
+                    lccv_failure_count_++;
+                    lccv_working_ = false;
+                    if (lccv_failure_count_ >= watchdog_threshold && camera_watchdog_active_) {
+                        RCLCPP_ERROR(this->get_logger(), "LCCV camera failure threshold reached (exception), triggering node restart");
+                        try_restart_node();
+                        return;  // 退出线程
+                    }
+                } else if (camera_name == "dh") {
+                    dh_failure_count_++;
+                    dh_working_ = false;
+                    if (dh_failure_count_ >= watchdog_threshold && camera_watchdog_active_) {
+                        RCLCPP_ERROR(this->get_logger(), "DH camera failure threshold reached (exception), triggering node restart");
+                        try_restart_node();
+                        return;  // 退出线程
+                    }
+                }
+                
                 std::this_thread::sleep_for(16ms);
                 continue;
+            }
+            
+            // 重置失败计数
+            if (camera_name == "lccv") {
+                lccv_failure_count_ = 0;
+                lccv_working_ = true;
+            } else if (camera_name == "dh") {
+                dh_failure_count_ = 0;
+                dh_working_ = true;
             }
 
             RCLCPP_DEBUG(this->get_logger(), "Image read successfully from %s camera", camera_name.c_str());
@@ -258,12 +358,49 @@ void NodeDartLauncherDetector::on_parameter_event(const rclcpp::Parameter &param
         dh_enabled_ = param.as_bool();
         RCLCPP_INFO(this->get_logger(), "DH camera enabled set to: %s", dh_enabled_ ? "true" : "false");
     }
+    else if (param.get_name() == "camera_watchdog.enable")
+    {
+        camera_watchdog_active_ = param.as_bool();
+        RCLCPP_INFO(this->get_logger(), "Camera watchdog enabled set to: %s", camera_watchdog_active_ ? "true" : "false");
+        
+        // 如果启用看门狗，重置计数器
+        if (camera_watchdog_active_)
+        {
+            lccv_failure_count_ = 0;
+            dh_failure_count_ = 0;
+            restart_attempts_ = 0;
+        }
+    }
+    else if (param.get_name() == "camera_watchdog.failure_threshold")
+    {
+        int threshold = param.as_int();
+        RCLCPP_INFO(this->get_logger(), "Camera watchdog failure threshold set to: %d", threshold);
+    }
 }
 
 NodeDartLauncherDetector::NodeDartLauncherDetector(rclcpp::NodeOptions options)
     : rclcpp_lifecycle::LifecycleNode("node_dart_launcher_detector", options),
-      running_(false), lccv_enabled_(true), dh_enabled_(true)
+      running_(false), lccv_enabled_(true), dh_enabled_(true),
+      lccv_failure_count_(0), dh_failure_count_(0), restart_attempts_(0),
+      camera_watchdog_active_(false), lccv_working_(false), dh_working_(false),
+      led_files_initialized_(false)
 {
+    // 设置LED文件权限
+    try {
+        // 尝试为LED文件设置权限
+        int chmod_result = 0;
+        chmod_result = system("sudo chmod 666 /sys/class/leds/PWR/brightness");
+        if (chmod_result != 0) {
+            RCLCPP_WARN(this->get_logger(), "Failed to set permissions for PWR LED: %s", strerror(errno));
+        }
+        
+        chmod_result = system("sudo chmod 666 /sys/class/leds/ACT/brightness");
+        if (chmod_result != 0) {
+            RCLCPP_WARN(this->get_logger(), "Failed to set permissions for ACT LED: %s", strerror(errno));
+        }
+    } catch (const std::exception &e) {
+        RCLCPP_ERROR(this->get_logger(), "Exception during LED permission setup: %s", e.what());
+    }
 }
 
 // 新增一个通用函数，用于加载相机参数并打开相机
@@ -337,7 +474,20 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
     RCLCPP_INFO(this->get_logger(), "Configuring node...");
 
     RCLCPP_INFO(this->get_logger(), "Loading parameters...");
-
+    
+    // 声明相机看门狗参数
+    if (!this->has_parameter("camera_watchdog.enable")) {
+        this->declare_parameter("camera_watchdog.enable", true);
+    }
+    
+    if (!this->has_parameter("camera_watchdog.failure_threshold")) {
+        this->declare_parameter("camera_watchdog.failure_threshold", 30);
+    }
+    
+    camera_watchdog_active_ = this->get_parameter("camera_watchdog.enable").as_bool();
+    RCLCPP_INFO(this->get_logger(), "Camera watchdog is %s", camera_watchdog_active_ ? "enabled" : "disabled");
+    RCLCPP_INFO(this->get_logger(), "Camera watchdog failure threshold: %d", this->get_parameter("camera_watchdog.failure_threshold").as_int());
+    
     // 必需参数检查
     const std::string required_params[] = {
         "lccv.enable",
@@ -477,7 +627,15 @@ NodeDartLauncherDetector::on_activate(
     const rclcpp_lifecycle::State &pre_state)
 {
     RCLCPP_INFO(this->get_logger(), "Activating node...");
+    
+    // 重置看门狗计数器和工作状态
+    lccv_failure_count_ = 0;
+    dh_failure_count_ = 0;
+    restart_attempts_ = 0;
+    lccv_working_ = false;
+    dh_working_ = false;
     running_ = true;
+    
     if (lccv_enabled_)
     {
         if (camera_lccv_->isOpened)
@@ -491,7 +649,7 @@ NodeDartLauncherDetector::on_activate(
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::FAILURE;
         }
         lccv_thread_ = std::make_shared<std::thread>(std::bind(&NodeDartLauncherDetector::camera_thread, this, camera_lccv_, "lccv", true));
-        RCLCPP_INFO(this->get_logger(), "LCCV camera thread started and detached.");
+        RCLCPP_INFO(this->get_logger(), "LCCV camera thread started.");
     }
     if (dh_enabled_)
     {
@@ -505,8 +663,21 @@ NodeDartLauncherDetector::on_activate(
             return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::FAILURE;
         }
         dh_thread_ = std::make_shared<std::thread>(std::bind(&NodeDartLauncherDetector::camera_thread, this, camera_dh_, "dh", false));
-        RCLCPP_INFO(this->get_logger(), "DH camera thread started and detached.");
+        RCLCPP_INFO(this->get_logger(), "DH camera thread started.");
     }
+    
+    // 初始化LED文件和状态
+    if (initialize_led_files()) {
+        set_led_state("PWR", false);
+        set_led_state("ACT", true);
+        
+        // 启动LED控制线程
+        led_control_thread_ = std::make_shared<std::thread>(&NodeDartLauncherDetector::led_control_thread_function, this);
+    } else {
+        RCLCPP_ERROR(this->get_logger(), "Failed to initialize LED files, LED control will not be available");
+    }
+    RCLCPP_INFO(this->get_logger(), "LED control thread started.");
+    
     RCLCPP_INFO(this->get_logger(), "Node activation complete.");
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
@@ -533,8 +704,26 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
         RCLCPP_INFO(this->get_logger(), "DH camera thread joined.");
     }
 
-    RCLCPP_INFO(this->get_logger(), "All threads stopped.");
+    RCLCPP_INFO(this->get_logger(), "All camera threads stopped.");
+    
+    // 停止LED控制线程
+    if (led_control_thread_)
+    {
+        if (led_control_thread_->joinable()) {
+            led_control_thread_->join();
+            RCLCPP_INFO(this->get_logger(), "LED control thread joined.");
+        } else {
+            RCLCPP_WARN(this->get_logger(), "LED control thread is not joinable.");
+        }
+    }
 
+    // 确保LED恢复正常状态
+    set_led_state("PWR", false);  // 默认电源灭
+    set_led_state("ACT", false); // 默认活动灯亮
+
+    // 关闭LED文件，下次激活时重新打开
+    close_led_files();
+    
     RCLCPP_INFO(this->get_logger(), "Node deactivation complete.");
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
@@ -552,6 +741,9 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
     qr_detect_publisher_.reset();
     greenlight_image_publisher_.reset();
     greenlight_detector_.reset();
+    
+    // 关闭LED文件
+    close_led_files();
     RCLCPP_INFO(this->get_logger(), "Resources successfully cleaned up.");
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
@@ -561,19 +753,220 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
 {
     RCLCPP_INFO(this->get_logger(), "Shutting down node...");
     running_ = false;
+    
+    // 停止所有线程
     if (lccv_thread_)
     {
-        lccv_thread_->join();
+        if (lccv_thread_->joinable()) {
+            lccv_thread_->join();
+        }
         lccv_thread_.reset();
     }
+    
     if (dh_thread_)
     {
-        dh_thread_->join();
+        if (dh_thread_->joinable()) {
+            dh_thread_->join();
+        }
         dh_thread_.reset();
     }
+    
+    if (led_control_thread_)
+    {
+        if (led_control_thread_->joinable()) {
+            led_control_thread_->join();
+        }
+        led_control_thread_.reset();
+    }
+    
+    // 确保LED恢复正常状态
+    set_led_state("PWR", false);  // 默认电源灯灭
+    set_led_state("ACT", false); // 默认活动灯亮
+    // 关闭LED文件
+    close_led_files();
+    
     RCLCPP_INFO(this->get_logger(), "Node shutdown complete.");
 
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
+}
+
+void NodeDartLauncherDetector::set_led_state(const std::string &led, bool state)
+{
+    // 如果文件未初始化，则尝试初始化
+    if (!led_files_initialized_ && !initialize_led_files()) {
+        RCLCPP_ERROR(this->get_logger(), "Failed to initialize LED files when setting LED state");
+        return;
+    }
+    
+    try {
+        std::ofstream* led_file = nullptr;
+        if (led == "PWR") {
+            led_file = pwr_led_file_.get();
+        } else if (led == "ACT") {
+            led_file = act_led_file_.get();
+        } else {
+            RCLCPP_ERROR(this->get_logger(), "Unknown LED: %s", led.c_str());
+            return;
+        }
+        
+        if (led_file && led_file->is_open()) {
+            // 在写入前移动到文件开头
+            led_file->seekp(0);
+            *led_file << (state ? "1" : "0");
+            led_file->flush();
+            RCLCPP_DEBUG(this->get_logger(), "Set LED %s state to %d", led.c_str(), state ? 1 : 0);
+        } else {
+            RCLCPP_WARN(this->get_logger(), "LED file for %s is not valid", led.c_str());
+            // 尝试重新初始化文件
+            close_led_files();
+            if (initialize_led_files()) {
+                set_led_state(led, state); // 递归调用一次
+            }
+        }
+    } catch (const std::exception& e) {
+        RCLCPP_ERROR(this->get_logger(), "Exception when setting LED %s state: %s", led.c_str(), e.what());
+        // 出现异常时尝试重新初始化
+        close_led_files();
+        initialize_led_files();
+    }
+}
+
+void NodeDartLauncherDetector::led_control_thread_function()
+{
+    RCLCPP_INFO(this->get_logger(), "LED control thread started");
+    bool pwr_state = false;
+    bool act_state = true;
+    
+    // 确保LED文件已经初始化
+    if (!led_files_initialized_ && !initialize_led_files()) {
+        RCLCPP_ERROR(this->get_logger(), "Failed to initialize LED files, LED control thread exiting");
+        return;
+    }
+    
+    while (running_ && rclcpp::ok()) {
+        if (!led_files_initialized_) {
+            // 如果文件句柄丢失，尝试重新初始化
+            if (!initialize_led_files()) {
+                RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 
+                                    5000, "Could not initialize LED files, retrying...");
+                std::this_thread::sleep_for(1000ms);
+                continue;
+            }
+        }
+        
+        try {
+            if (lccv_working_ && dh_working_) {
+                // 交替闪烁LED
+                pwr_state = !pwr_state;
+                act_state = !act_state;
+                
+                set_led_state("PWR", pwr_state);
+                set_led_state("ACT", act_state);
+            } else {
+                // 如果相机异常，设置固定状态
+                set_led_state("PWR", false);
+                set_led_state("ACT", true);
+            }
+        } catch (const std::exception& e) {
+            RCLCPP_ERROR(this->get_logger(), "Exception in LED control thread: %s", e.what());
+            // 发生错误时尝试重新初始化文件
+            close_led_files();
+        }
+        
+        // 每500毫秒切换一次LED状态
+        std::this_thread::sleep_for(500ms);
+    }
+    
+    // 退出时恢复LED默认状态
+    if (led_files_initialized_) {
+        set_led_state("PWR", false);  // 默认电源灭
+        set_led_state("ACT", false); // 默认活动灯亮
+    }
+    
+    RCLCPP_INFO(this->get_logger(), "LED control thread stopped");
+}
+
+void NodeDartLauncherDetector::try_restart_node()
+{
+    std::lock_guard<std::mutex> lock(restart_mutex_);
+    
+    // 如果已经尝试重启三次，则转为inactive状态
+    if (restart_attempts_ >= 3) {
+        RCLCPP_ERROR(this->get_logger(), "Failed to restart node after 3 attempts, switching to inactive state");
+        
+        // 切换到inactive状态
+        if (this->get_current_state().label() == "active") {
+            this->deactivate();
+        }
+        
+        restart_attempts_ = 0;
+        return;
+    }
+    
+    RCLCPP_WARN(this->get_logger(), "Camera watchdog triggered. Attempting to restart node (attempt %d/3)", restart_attempts_.load() + 1);
+    restart_attempts_++;
+    
+    // 类似于参数回调中的重启逻辑
+    if (this->get_current_state().label() == "active") {
+        RCLCPP_INFO(this->get_logger(), "Reconfiguring node due to camera failure...");
+        this->deactivate();
+        this->cleanup();
+        this->configure();
+        this->activate();
+    } else if (this->get_current_state().label() == "inactive") {
+        RCLCPP_INFO(this->get_logger(), "Node not active, reconfiguring...");
+        this->cleanup();
+        this->configure();
+    }
+}
+
+bool NodeDartLauncherDetector::initialize_led_files()
+{
+    if (led_files_initialized_) {
+        return true; // 已经初始化过了
+    }
+    
+    try {
+        // 打开PWR LED文件
+        pwr_led_file_ = std::make_unique<std::ofstream>("/sys/class/leds/PWR/brightness");
+        if (!pwr_led_file_->is_open()) {
+            RCLCPP_ERROR(this->get_logger(), "Failed to open PWR LED file");
+            return false;
+        }
+        
+        // 打开ACT LED文件
+        act_led_file_ = std::make_unique<std::ofstream>("/sys/class/leds/ACT/brightness");
+        if (!act_led_file_->is_open()) {
+            RCLCPP_ERROR(this->get_logger(), "Failed to open ACT LED file");
+            pwr_led_file_->close();
+            pwr_led_file_.reset();
+            return false;
+        }
+        
+        led_files_initialized_ = true;
+        RCLCPP_INFO(this->get_logger(), "LED files successfully initialized");
+        return true;
+    } catch (const std::exception& e) {
+        RCLCPP_ERROR(this->get_logger(), "Exception during LED file initialization: %s", e.what());
+        close_led_files();
+        return false;
+    }
+}
+
+void NodeDartLauncherDetector::close_led_files()
+{
+    if (pwr_led_file_ && pwr_led_file_->is_open()) {
+        pwr_led_file_->close();
+        pwr_led_file_.reset();
+    }
+    
+    if (act_led_file_ && act_led_file_->is_open()) {
+        act_led_file_->close();
+        act_led_file_.reset();
+    }
+    
+    led_files_initialized_ = false;
+    RCLCPP_INFO(this->get_logger(), "LED files closed");
 }
 
 int main(int argc, char **argv)

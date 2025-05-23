@@ -1,5 +1,8 @@
 /node_dart_launcher_detector:
   ros__parameters:
+    camera_watchdog:
+      enable: true
+      failure_threshold: 10
     lccv:
       enable: true
       image_width: 1640

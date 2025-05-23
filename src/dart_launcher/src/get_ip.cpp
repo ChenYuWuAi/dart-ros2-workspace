@@ -27,5 +27,5 @@ std::string getIPAddress(const std::string &interface)
         output.pop_back();
         return output;
     }
-    return "Unavailable";
+    return "";
 }

@@ -75,7 +75,7 @@ add_executable(node_dart_launcher_lifecycle src/node_dart_launcher_lifecycle.cpp
 ament_target_dependencies(node_dart_launcher_lifecycle rclcpp std_msgs dart_msgs std_srvs std_msgs lifecycle_msgs rclcpp_lifecycle)
 # Add node_dart_app target
 add_executable(node_dart_app src/node_dart_app.cpp src/get_ip.cpp)
-ament_target_dependencies(node_dart_app rclcpp std_msgs dart_msgs std_srvs sensor_msgs cv_bridge)
+ament_target_dependencies(node_dart_app rclcpp_lifecycle rclcpp std_msgs dart_msgs std_srvs sensor_msgs cv_bridge)
 
 # Add Lvgl OpenCV
 target_include_directories(node_dart_app PRIVATE
@@ -85,24 +85,28 @@ target_include_directories(node_dart_app PRIVATE
     ${OpenCV_INCLUDE_DIRS}
 )
 
+target_include_directories(lvgl PUBLIC thirdparty)
+
 # # 递归添加子目录${PROJECT_SOURCE_DIR}/generated/*
-FILE(GLOB_RECURSE SOURCES thirdparty/dart-ui/custom/*.c thirdparty/dart-ui/custom/*.cpp
+FILE(GLOB_RECURSE LV_SOURCES thirdparty/dart-ui/custom/*.c thirdparty/dart-ui/custom/*.cpp
     thirdparty/dart-ui/generated/*.c thirdparty/dart-ui/generated/*.cpp
     thirdparty/dart-ui/generated/guider_customer_fonts/*.c thirdparty/dart-ui/generated/guider_customer_fonts/*.cpp
     thirdparty/dart-ui/generated/guider_fonts/*.c thirdparty/dart-ui/generated/guider_fonts/*.cpp
     thirdparty/dart-ui/generated/images/*.c thirdparty/dart-ui/generated/images/*.cpp
 )
-target_sources(node_dart_app PRIVATE ${SOURCES})
-# target_link_directories(node_dart_app PRIVATE lvgl/lib src/generated/lib)
+target_sources(node_dart_app PRIVATE ${LV_SOURCES})
 
-# if(BUILD_SHARED_LIBS)
-#     target_link_libraries(node_dart_app lvgl lv_drivers guider_generated ${OpenCV_LIBS} yaml-cpp ${GSL_LIBRARIES})
-# else()
-#     target_link_libraries(node_dart_app liblvgl.a liblv_drivers.a libguider_generated.a ${OpenCV_LIBS} yaml-cpp ${GSL_LIBRARIES})
-# endif()
+# LibDRM & SDL2
+include(${CMAKE_CURRENT_LIST_DIR}/thirdparty/lvgl/tests/FindLibDRM.cmake)
+include_directories(${Libdrm_INCLUDE_DIRS})
+target_include_directories(lvgl PUBLIC ${Libdrm_INCLUDE_DIRS})
 
-# target_link_libraries(node_dart_app)
+# find_package(SDL2)
+# find_package(SDL2_image)
+# include_directories(${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS})
 
+# target_link_libraries(node_dart_app lvgl lvgl::thorvg ${SDL2_LIBRARIES} ${SDL2_IMAGE_LIBRARIES} ${Libdrm_LIBRARIES} m pthread)
+target_link_libraries(node_dart_app lvgl lvgl::thorvg ${Libdrm_LIBRARIES})
 
 # # Add node_dart_config target
 # add_executable(node_dart_config src/node_dart_config.cpp src/dart_config.cpp)
@@ -126,7 +130,7 @@ target_sources(node_dart_app PRIVATE ${SOURCES})
 # target_link_libraries(dart_calibration yaml-cpp ${GSL_LIBRARIES} ${GSL_CBLAS_LIBRARIES})
 
 install(TARGETS
-    # node_dart_app
+    node_dart_app
     node_dart_param_gateway
     # node_dart_config
     node_dart_launcher_lifecycle

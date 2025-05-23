@@ -40,13 +40,35 @@ private:
     volatile bool running_;
     volatile bool lccv_enabled_;
     volatile bool dh_enabled_;
-
+    
+    // 相机看门狗相关变量
+    std::atomic<int> lccv_failure_count_;
+    std::atomic<int> dh_failure_count_;
+    std::atomic<int> restart_attempts_;
+    std::atomic<bool> camera_watchdog_active_;
+    std::mutex restart_mutex_;
+    
+    // LED控制相关变量
+    std::shared_ptr<std::thread> led_control_thread_;
+    std::atomic<bool> lccv_working_;
+    std::atomic<bool> dh_working_;
+    
+    // LED文件句柄
+    std::unique_ptr<std::ofstream> pwr_led_file_;
+    std::unique_ptr<std::ofstream> act_led_file_;
+    bool led_files_initialized_;
+    
     rclcpp::node_interfaces::PostSetParametersCallbackHandle::SharedPtr callback_set_parameter_handle;
 
     void camera_thread(std::shared_ptr<CameraDriver> camera, const std::string &camera_name, bool is_qr_detection);
     void perform_greenlight_detection(cv::Mat &frame, bool &is_detected, double &x, double &y);
     void on_parameter_event(const rclcpp::Parameter &param);
     bool load_and_open_camera(const std::string &camera_prefix, std::shared_ptr<CameraDriver> &camera_driver);
+    void led_control_thread_function();
+    void try_restart_node();
+    void set_led_state(const std::string &led, bool state);
+    bool initialize_led_files();
+    void close_led_files();
 
 public:
     explicit NodeDartLauncherDetector(rclcpp::NodeOptions options);

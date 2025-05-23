@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @file lv_conf.h
  * Configuration file for v9.2.2
  */
@@ -27,10 +27,10 @@
 
 /*Color depth: 1 (I1), 8 (L8), 16 (RGB565), 24 (RGB888), 32 (XRGB8888)*/
 /*Maximal horizontal resolution*/
-#define LV_HOR_RES_MAX (480)
+#define LV_HOR_RES_MAX (800)
 
 /*Maximal vertical resolution*/
-#define LV_VER_RES_MAX (320)
+#define LV_VER_RES_MAX (480)
 #define LV_COLOR_DEPTH 16
 
 /*=========================
