@@ -200,10 +200,23 @@ void NodeDartApp::screen_main_loop()
         lv_obj_set_style_bg_color(guider_ui.scrHome_contText, lv_color_hex(0xFF9800), LV_PART_MAIN|LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(guider_ui.scrHome_labelPrompt, lv_color_hex(0xFF9800), LV_PART_MAIN|LV_STATE_DEFAULT);
       }
-      last_prompt = prompt;
-    });
+      last_prompt = prompt; });
   }
 
+  else if (lv_scr_act() == guider_ui.scrParams)
+  {
+    // 更新参数界面，界面为表格格式tableDartStatus和tableDartParams
+    // json
+    // 初次进入时初始化表格格式
+    if (last_obj != lv_scr_act())
+    {
+      // 初始化表格格式
+      // 将dart_launcher_status_中的数据填入表格
+      lv_table_set_col_cnt(guider_ui.scrParams_tableDartParams, 2);
+      lv_table_set_row_cnt(guider_ui.scrParams_tableDartParams, 0);
+      lv_table_set_col_width(guider_ui.scrParams_tableDartParams, 0, 150);
+      lv_table_set_col_width(guider_ui.scrParams_tableDartParams, 1, 150);
+    }
   last_obj = lv_scr_act();
 }
 
@@ -252,7 +265,6 @@ CallbackReturn NodeDartApp::on_cleanup(const rclcpp_lifecycle::State &)
 
   // 清除订阅者
   dart_launcher_status_sub_.reset();
-  dart_launcher_present_param_sub_.reset();
   green_light_sub_.reset();
   cv_image_sub_.reset();
 

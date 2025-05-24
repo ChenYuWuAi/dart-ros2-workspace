@@ -22,13 +22,14 @@
 
 // ROS2消息类型
 #include <dart_msgs/msg/dart_launcher_status.hpp>
-#include <dart_msgs/msg/dart_param.hpp>
 #include <dart_msgs/msg/green_light.hpp>
-#include <dart_msgs/msg/judge.hpp>
 #include <std_srvs/srv/trigger.hpp>
 #include <cv_bridge/cv_bridge.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <sensor_msgs/msg/compressed_image.hpp>
+
+// JSON
+#include <nlohmann/json.hpp>
 
 namespace fs = std::filesystem;
 

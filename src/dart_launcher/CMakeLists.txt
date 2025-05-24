@@ -83,6 +83,7 @@ target_include_directories(node_dart_app PRIVATE
     include
     thirdparty/dart-ui/generated thirdparty/dart-ui/custom thirdparty/dart-ui/generated/guider_customer_fonts thirdparty/dart-ui/generated/guider_fonts thirdparty/dart-ui/generated/images
     ${OpenCV_INCLUDE_DIRS}
+    thirdparty/json/include
 )
 
 target_include_directories(lvgl PUBLIC thirdparty)
@@ -106,7 +107,7 @@ target_include_directories(lvgl PUBLIC ${Libdrm_INCLUDE_DIRS})
 # include_directories(${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS})
 
 # target_link_libraries(node_dart_app lvgl lvgl::thorvg ${SDL2_LIBRARIES} ${SDL2_IMAGE_LIBRARIES} ${Libdrm_LIBRARIES} m pthread)
-target_link_libraries(node_dart_app lvgl lvgl::thorvg ${Libdrm_LIBRARIES})
+target_link_libraries(node_dart_app lvgl lvgl::thorvg ${Libdrm_LIBRARIES} nlohmann_json::nlohmann_json)
 
 # # Add node_dart_config target
 # add_executable(node_dart_config src/node_dart_config.cpp src/dart_config.cpp)
