@@ -11,7 +11,6 @@
 
 // LVGL相关头文件
 #include "lvgl/lvgl.h"
-#include "lvgl/demos/lv_demos.h"
 #include <unistd.h>
 #include <pthread.h>
 #include <time.h>
@@ -22,6 +21,7 @@
 
 // ROS2消息类型
 #include <dart_msgs/msg/dart_launcher_status.hpp>
+#include <dart_msgs/msg/dart_launcher_params.hpp>
 #include <dart_msgs/msg/green_light.hpp>
 #include <std_srvs/srv/trigger.hpp>
 #include <cv_bridge/cv_bridge.hpp>
@@ -30,6 +30,9 @@
 
 // JSON
 #include <nlohmann/json.hpp>
+
+// SDL
+#include <SDL2/SDL.h>
 
 namespace fs = std::filesystem;
 
@@ -53,6 +56,9 @@ private:
   // 互斥锁
   std::mutex mutex_ui_;
 
+  std::string ip_address_;
+  bool is_online_ = false;
+
   // 线程
   std::shared_ptr<std::thread> ui_thread_;
   std::shared_ptr<std::thread> watch_file_thread_;
@@ -62,31 +68,25 @@ private:
 
   // 订阅者
   rclcpp::Subscription<dart_msgs::msg::DartLauncherStatus>::SharedPtr dart_launcher_status_sub_;
-  rclcpp::Subscription<dart_msgs::msg::DartParam>::SharedPtr dart_launcher_present_param_sub_;
+  rclcpp::Subscription<dart_msgs::msg::DartLauncherParams>::SharedPtr dart_launcher_present_param_sub_;
   rclcpp::Subscription<dart_msgs::msg::GreenLight>::SharedPtr green_light_sub_;
-  rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr cv_image_sub_;
+  rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr qrcode_image_sub_;
+  rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr greenlight_image_sub_;
 
   // 状态变量
   dart_msgs::msg::DartLauncherStatus dart_launcher_status_;
   bool mcu_online_ = false;
   std::chrono::time_point<std::chrono::steady_clock> last_status_time_;
 
-  // 服务
-  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr restart_gui_srv_;
-
-  // GUI相关
-  std::vector<lv_obj_t *> Main_list_darts_items_;
-  bool callback_spinbox_disabled = false;
-  std::array<int, 4> target_yaw_launch_angle_offset = {0, 0, 0, 0};
-
-  // 其他变量
-  OnSetParametersCallbackHandle::SharedPtr callback_set_parameter_handle;
-  lv_obj_t *obj_dart_list_seleted = nullptr;
+  // 图像
+  sensor_msgs::msg::CompressedImage qrcode_image_;
+  sensor_msgs::msg::CompressedImage greenlight_image_;
 
   // 私有方法
   void timer_callback_ui();
-  void update_cv_image(sensor_msgs::msg::CompressedImage::SharedPtr msg);
-  void update_ip_address();
+  void update_greenlight_image(sensor_msgs::msg::CompressedImage::SharedPtr msg);
+  void update_qrcode_image(sensor_msgs::msg::CompressedImage::SharedPtr msg);
+  void update_network_status();
 
   void screen_main_loop();
 
@@ -130,10 +130,12 @@ static void lv_linux_disp_init(void)
 #elif LV_USE_SDL
 static void lv_linux_disp_init(void)
 {
-  const int width = atoi(getenv("LV_SDL_VIDEO_WIDTH") ?: "1024");
-  const int height = atoi(getenv("LV_SDL_VIDEO_HEIGHT") ?: "600");
+  const int width = atoi(getenv("LV_SDL_VIDEO_WIDTH") ?: "800");
+  const int height = atoi(getenv("LV_SDL_VIDEO_HEIGHT") ?: "480");
   lv_sdl_window_create(width, height);
   lv_sdl_mouse_create();
+  
+  SDL_ShowCursor(SDL_DISABLE);
 }
 #else
 #error Unsupported configuration

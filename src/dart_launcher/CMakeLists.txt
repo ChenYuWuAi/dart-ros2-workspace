@@ -94,6 +94,7 @@ FILE(GLOB_RECURSE LV_SOURCES thirdparty/dart-ui/custom/*.c thirdparty/dart-ui/cu
     thirdparty/dart-ui/generated/guider_customer_fonts/*.c thirdparty/dart-ui/generated/guider_customer_fonts/*.cpp
     thirdparty/dart-ui/generated/guider_fonts/*.c thirdparty/dart-ui/generated/guider_fonts/*.cpp
     thirdparty/dart-ui/generated/images/*.c thirdparty/dart-ui/generated/images/*.cpp
+    ../dart_comm_share/src/dart_launcher_param.cpp
 )
 target_sources(node_dart_app PRIVATE ${LV_SOURCES})
 
@@ -102,12 +103,12 @@ include(${CMAKE_CURRENT_LIST_DIR}/thirdparty/lvgl/tests/FindLibDRM.cmake)
 include_directories(${Libdrm_INCLUDE_DIRS})
 target_include_directories(lvgl PUBLIC ${Libdrm_INCLUDE_DIRS})
 
-# find_package(SDL2)
-# find_package(SDL2_image)
+find_package(SDL2)
+find_package(SDL2_image)
 # include_directories(${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS})
 
 # target_link_libraries(node_dart_app lvgl lvgl::thorvg ${SDL2_LIBRARIES} ${SDL2_IMAGE_LIBRARIES} ${Libdrm_LIBRARIES} m pthread)
-target_link_libraries(node_dart_app lvgl lvgl::thorvg ${Libdrm_LIBRARIES} nlohmann_json::nlohmann_json)
+target_link_libraries(node_dart_app lvgl lvgl::thorvg nlohmann_json::nlohmann_json ${SDL2_LIBRARIES} ${SDL2_IMAGE_LIBRARIES} m pthread)
 
 # # Add node_dart_config target
 # add_executable(node_dart_config src/node_dart_config.cpp src/dart_config.cpp)
