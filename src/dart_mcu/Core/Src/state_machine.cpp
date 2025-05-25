@@ -134,13 +134,17 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
 (RC_Data.Switch_Left == RC_SW_MID ? E_Gate_State::OPERATING : \
     E_Gate_State::OPENED)) \
 
+#ifndef pdTICKS_TO_S
+#define pdTICKS_TO_S(xTicks) ((xTicks) / configTICK_RATE_HZ)
+#endif
+
 #define disableLaser() HAL_GPIO_WritePin(GPIOG, GPIO_PIN_13, GPIO_PIN_RESET)
 #define enableLaser() HAL_GPIO_WritePin(GPIOG, GPIO_PIN_13, GPIO_PIN_SET)
 
     // 裁判系统判定Flag
-    uint8_t last_dart_launch_opening_status_ = 0; // 上一次发射状态
+    uint8_t last_dart_launch_opening_status_ = E_Gate_State::CLOSED; // 上一次发射状态
     uint16_t last_dart_launch_time_ = 0; // 上一次发射指令下达时间
-    bool match_flag_ = 0; // 上场比赛判断 若已经上场则执行最严格的安全措施
+    bool match_flag_ = false; // 上场比赛判断 若已经上场则执行最严格的安全措施
     bool pre_launch_grant = false;
 
     bool isRemoteOnline(TickType_t current_tick) {
@@ -157,14 +161,18 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
             if (isRemoteOnline(current_tick)) {
                 if (RC_Data.Switch_Right == RC_SW_UP) {
                     next_state = E_Dart_State::Protect;
+
                 } else if (RC_Data.Switch_Right == RC_SW_DOWN || RC_Data.Switch_Right == RC_SW_MID) {
                     next_state = E_Dart_State::Match;
                 }
+            }else
+            {
+                next_state = E_Dart_State::Match;
             }
         } else {
             if (isRemoteOnline(current_tick)) {
                 if (RC_Data.Switch_Right == RC_SW_UP) {
-                    next_state = E_Dart_State::Protect;
+                    next_state = E_Dart_State::Protect;/**/
                 } else if (RC_Data.Switch_Right == RC_SW_DOWN) {
                     next_state = E_Dart_State::Match;
                 } else if (RC_Data.Switch_Right == RC_SW_MID) {
@@ -218,7 +226,7 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                 motor::MotorTriggerLS.motor_state_ != motor::E_MotorState::DISCONNECTED;
         msgDartStatus.judge_online = !(xTaskGetTickCount() - ext_judge_last_receive_time > pdMS_TO_TICKS(1000));
         msgDartStatus.rc_online = isRemoteOnline(xTaskGetTickCount());
-        msgDartStatus.dart_state = openFSM_.focusEState();
+        // msgDartStatus.dart_state = openFSM_.focusEState();
         msgDartStatus.motor_yaw_angle = motor_controller::MotorYawLSController.current_angle_with_rounds_;
         msgDartStatus.motor_trigger_angle =
                 motor::MotorTriggerLS.current_round_ * 8192 + motor::MotorTriggerLS.current_angle_;
@@ -240,7 +248,7 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
 
         // 比赛上场判断
         if (ext_game_status.game_progress != 0)
-            match_flag_ = 1;
+            match_flag_ = true;
     }
 
     Dart_FSM dart_fsm;
@@ -419,7 +427,7 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
         }
 
         void update(OpenFSM &fsm) const override {
-            //            使用与逻辑保证所有函数执行完成
+            // 使用与逻辑保证所有函数执行完成
             bool success = true;
             success &= actionResetLSUntilTrigger<>(motor_controller::MotorYawLSController,
                                                    yaw_switch_state,
@@ -1085,9 +1093,10 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                 fsm.nextAction();
                 return;
             }
+            uint8_t game_progress = ext_game_status.game_progress;
 
             // 判断是否连续发射，如果是的话就跳过该action
-            if (fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire) {
+            if (fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire && game_progress == 4) {
                 if (msgDartStatus.dart_launch_process >= 2)
                     fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = false;
                 soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_winxp));
@@ -1123,17 +1132,17 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
 
 
             // 读取裁判系统变量，线程安全
+            uint8_t game_progress = ext_game_status.game_progress;
+            uint16_t latest_launch_cmd_time = ext_dart_client_cmd.latest_launch_cmd_time;
+            uint8_t dart_remaining_time = ext_dart_info.dart_remaining_time;
+            uint16_t dart_info = ext_dart_info.dart_info;
+            state_machine::E_Target_Type target_type;
+            target_type = static_cast<E_Target_Type>((dart_info >> 8) & 0x03);
 #ifndef CONFIG_SIMULATE_DART_LAUNCH_OPENING_STATUS
             uint8_t dart_launch_opening_status = ext_dart_client_cmd.dart_launch_opening_status;
 #else CONFIG_SIMULATE_DART_LAUNCH_OPENING_STATUS
             uint8_t dart_launch_opening_status = simulateDartGateState();
 #endif
-            uint8_t game_progress = ext_game_status.game_progress;
-            uint8_t dart_remaining_time = ext_dart_info.dart_remaining_time;
-            uint16_t latest_launch_cmd_time = ext_dart_client_cmd.latest_launch_cmd_time;
-            uint16_t dart_info = ext_dart_info.dart_info;
-            state_machine::E_Target_Type target_type = Default;
-            target_type = static_cast<E_Target_Type>((dart_info >> 8) & 0x03);
 
             // 判断是否更新自瞄
             if (game_progress == 2 || game_progress == 3) {
@@ -1157,30 +1166,52 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                 msgDartProtocols.last_param_update_time = rmw_uros_epoch_millis();
             }
 
-            // 等待发射信号
-            // 比赛内开启飞镖闸门就预位准备发射，最速化发射
+            // 等待发射信号和预发射信号
             bool launch_grant_ = false;
 
             // ====== 自动信号域 ======
+#ifndef CONFIG_SIMULATE_DART_LAUNCH_OPENING_STATUS
+            // TODO:左摇杆拨上时，屏蔽以下信号
+            if (RC_Data.Switch_Left != RC_SW_UP)
+            {
+                // 发射信号一：裁判系统飞镖闸门从“正在运动”达到“完全开启”信号，同时比赛正常进行中
+                launch_grant_ |= (last_dart_launch_opening_status_ == E_Gate_State::OPERATING &&
+                                dart_launch_opening_status == E_Gate_State::OPENED &&
+                                game_progress == 4);
 
-            // 信号一：裁判系统飞镖闸门从“正在开启”达到“完全开启”信号，同时比赛正常进行中
-            launch_grant_ |= (last_dart_launch_opening_status_ == E_Gate_State::OPERATING &&
-                              dart_launch_opening_status == E_Gate_State::OPENED &&
-                              game_progress == 4);
 
-            pre_launch_grant |= (last_dart_launch_opening_status_ == E_Gate_State::CLOSED &&
-                                 dart_launch_opening_status == E_Gate_State::OPERATING &&
+                // 发射信号二：飞镖发射剩余时间变化，时间落在20s内，而且比赛进行中
+                launch_grant_ |= (dart_remaining_time > 0 &&
+                                 dart_remaining_time <= 20 &&
                                  game_progress == 4);
 
-            // 信号二：飞镖发射剩余时间变化，时间落在20s内，而且比赛进行中
-            launch_grant_ |= (dart_remaining_time > 2 &&
-                              dart_remaining_time <= 20 &&
-                              game_progress == 4);
-            // TODO: 真正比赛删掉,因为信号二在没有官方闸门的情况下无效
-            launch_grant_ |= dart_launch_opening_status == E_Gate_State::OPENED;
+                // 预发射信号一：裁判系统飞镖发射站从从“完全关闭”到“正在运动”中
+                pre_launch_grant |= (last_dart_launch_opening_status_ == E_Gate_State::CLOSED &&
+                                     dart_launch_opening_status == E_Gate_State::OPERATING &&
+                                     game_progress == 4);
 
-            // 信号三：选手端手动发送触发
-            // 比赛状态确认
+                updateAutoAim(msgDartProtocols, false);
+            }
+#else CONFIG_SIMULATE_DART_LAUNCH_OPENING_STATUS
+            // 发射信号一：模拟飞镖发射站闸门从“正在运动”达到“完全开启”且比赛正常进行中
+            launch_grant_ |= (last_dart_launch_opening_status_ == E_Gate_State::OPERATING &&
+                              dart_launch_opening_status == E_Gate_State::OPENED);
+
+            // 发射信号二：飞镖发射剩余时间变化，时间落在20s内，而且比赛进行中
+            // 飞镖发射站闸门打开即可发射，方便平常测镖
+            launch_grant_ |= (dart_remaining_time > 2 &&
+                             dart_remaining_time <= 20 &&
+                             game_progress == 4) ||
+                             dart_launch_opening_status == E_Gate_State::OPENED;
+
+            // 预发射信号一：模拟飞镖发射站闸门从"完全关闭"到“正在运动”中
+            pre_launch_grant |= (last_dart_launch_opening_status_ == E_Gate_State::CLOSED &&
+                                 dart_launch_opening_status == E_Gate_State::OPERATING &&
+                                 (game_progress == 0 || game_progress == 4));
+#endif
+
+            // 发射信号三：选手端手动发送触发
+            // 比赛状态,选手端确认发射
             if (latest_launch_cmd_time != 0 &&
                 latest_launch_cmd_time != last_dart_launch_time_ &&
                 game_progress == 4) {
@@ -1193,7 +1224,7 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                 fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = true;
 
             // ===== 手动信号域 =====
-            // 信号四：遥控器信号 外八字或模拟闸门打开，不要求比赛进行中 要求不在上场模式
+            // 发射信号四：遥控器信号 外八字；如果在上场模式，则需要在比赛正常进行状态
             if (((RC_Data.ch0 > 1400 && RC_Data.ch2 < 400) && (!match_flag_)) ||
                 ((RC_Data.ch0 > 1400 && RC_Data.ch2 < 400) && game_progress == 4 && (match_flag_))) {
                 launch_grant_ = true;
@@ -1205,16 +1236,20 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                     fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = true;
             }
 
-            // 门控 比赛时间不足\准备阶段\自检时\自瞄进行中\选到基地随机移动目标\闸门不是打开状态 拒绝发射
-            if ((
-                // TODO:在真正比赛时恢复时间判断逻辑
-// (ext_game_status.stage_remain_time < 4 || dart_remaining_time < 3) && game_progress == 4) ||
+            // 预发射信号二：遥控器信号 内八字；如果在上场模式，则需要在比赛正常进行状态
+            pre_launch_grant |= (((RC_Data.ch2 > 1400 && RC_Data.ch0 < 400) && (!match_flag_)) ||
+                                ((RC_Data.ch2 > 1400 && RC_Data.ch0 < 400) && game_progress == 4 && match_flag_));
+
+
+            // 拒绝发射：门控、比赛时间不足\准备阶段\自检时\自瞄进行中
+            if (((((ext_game_status.stage_remain_time < 4 || dart_remaining_time < 3) && game_progress == 4) ||
                 game_progress == 1 ||game_progress == 2 ||
-                game_progress == 3 || game_progress == 5)
-                || dart_launch_opening_status != E_Gate_State::OPENED){
+                game_progress == 3 || game_progress == 5) ||
+                msgDartStatus.rc_online == 0) && match_flag_ ){
                 launch_grant_ = false;
                 fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = false;
-            }
+                }
+
 
             last_dart_launch_opening_status_ = dart_launch_opening_status;
 
@@ -1239,22 +1274,10 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
             } else {
                 base_velocity = 0;
             }
+
             if (launch_grant_) {
                 pre_launch_grant = false;
                 fsm.nextAction();
-            }
-
-            if (pre_launch_grant)
-            {
-                char msg1[40];
-                sprintf(msg1, "dart_launch_process: %d, pre_launch_grant in wait", msgDartStatus.dart_launch_process);
-                dart_mcu_log(msg1);
-            }
-            if (launch_grant_)
-            {
-                char msg2[40];
-                sprintf(msg2, "dart_launch_process: %d, launch_grant in wait", msgDartStatus.dart_launch_process);
-                dart_mcu_log(msg2);
             }
 
             // 设置Load电机速度
@@ -1365,7 +1388,7 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
 
                 case 3:
                     // 向上运动
-                    // TODO:在不扣扳机的情况下测试,需要时应注释掉
+                    // TODO:在不扣扳机的情况下测试
                     // setTriggerServotoTrigger();
                     if (motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
                         CONFIG_MOTOR_LOAD_ANGLE_UP) {
@@ -1409,17 +1432,6 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                 default:
                     fsm.custom<Dart_FSM>()->ActionMatch_Launch_State = 0;
             }
-
-            if (pre_launch_grant)
-            {
-                char msg1[40];
-                sprintf(msg1, "dart_launch_process: %d, pre_launch_grant in launch", msgDartStatus.dart_launch_process);
-                dart_mcu_log(msg1);
-            }
-
-                char msg2[40];
-                sprintf(msg2, "dart_launch_process: %d, already enter launch", msgDartStatus.dart_launch_process);
-                dart_mcu_log(msg2);
 
             // 设置Load电机速度
             motor_controller::MotorLoadController[0].target_velocity_ =
@@ -1484,78 +1496,134 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
             motor_controller::MotorTriggerLSController.set_state(
                     motor_controller::E_PID_Velocity_Angle_Controller_State::ANGLE_CONTROL);
 
+//             // 读取裁判系统变量，线程安全
+// #ifndef CONFIG_SIMULATE_DART_LAUNCH_OPENING_STATUS
+//             uint8_t dart_launch_opening_status = ext_dart_client_cmd.dart_launch_opening_status;
+// #else CONFIG_SIMULATE_DART_LAUNCH_OPENING_STATUS
+//             uint8_t dart_launch_opening_status = simulateDartGateState();
+// #endif
+//             uint8_t game_progress = ext_game_status.game_progress;
+//             uint8_t dart_remaining_time = ext_dart_info.dart_remaining_time;
+//             uint16_t latest_launch_cmd_time = ext_dart_client_cmd.latest_launch_cmd_time;
+//             uint16_t dart_info = ext_dart_info.dart_info;
+//             state_machine::E_Target_Type target_type;
+//             target_type = static_cast<E_Target_Type>((dart_info >> 8) & 0x03);
+//
+//             // 等待发射信号
+//             // 比赛内开启飞镖闸门就预位准备发射，最速化发射
+//             bool launch_grant_ = false;
+//
+//             // ====== 自动信号域 ======
+//
+//             // 信号一：裁判系统飞镖闸门从“正在开启”达到“完全开启”信号，同时比赛正常进行中
+//             launch_grant_ |= (last_dart_launch_opening_status_ == E_Gate_State::OPERATING &&
+//                               dart_launch_opening_status == E_Gate_State::OPENED &&
+//                               game_progress == 4);
+//
+//             pre_launch_grant |= (last_dart_launch_opening_status_ == E_Gate_State::CLOSED &&
+//                                  dart_launch_opening_status == E_Gate_State::OPERATING &&
+//                                  game_progress == 4);
+//
+//             // 信号二：飞镖发射剩余时间变化，时间落在15s内，而且比赛进行中
+//             launch_grant_ |= (dart_remaining_time > 0 &&
+//                               dart_remaining_time <= 15 &&
+//                               game_progress == 4);
+//             // TODO: 真正比赛删掉,因为信号二在没有官方闸门的情况下无效
+//             launch_grant_ |= dart_launch_opening_status == E_Gate_State::OPENED;
+//
+//             // 信号三：选手端手动发送触发
+//             // 比赛状态确认
+//             if (latest_launch_cmd_time != 0 &&
+//                 latest_launch_cmd_time != last_dart_launch_time_ &&
+//                 game_progress == 4) {
+//                 last_dart_launch_time_ = latest_launch_cmd_time;
+//                 launch_grant_ = true;
+//             }
+//
+//             // 自动信号触发时均要求二连发
+//             if (launch_grant_)
+//                 fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = true;
+//
+//             // ===== 手动信号域 =====
+//             // 信号四：遥控器信号 外八字，不要求比赛进行中 要求不在上场模式
+//             if (((RC_Data.ch0 > 1400 && RC_Data.ch2 < 400) && (!match_flag_)) ||
+//                 ((RC_Data.ch0 > 1400 && RC_Data.ch2 < 400) && game_progress == 4 && (match_flag_))) {
+//                 launch_grant_ = true;
+//                 // 如果是手动发射，则不允许二连发，以防空放
+//                 if (!match_flag_)
+//                     fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = false;
+//                     // 比赛中手动发射允许二连发
+//                 else
+//                     fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = true;
+//             }
+//
+//
+//             // 门控 比赛时间不足\准备阶段\自检时\自瞄进行中\闸门不在打开状态 拒绝发射
+//             if ((ext_game_status.stage_remain_time < 10 && game_progress == 4) || game_progress == 1 ||
+//                 game_progress == 2 || game_progress == 3 || game_progress == 5 ||
+//                 dart_launch_opening_status != E_Gate_State::OPENED) {
+//                 launch_grant_ = false;
+//                 fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = false;
+//             }
+//
+//             last_dart_launch_opening_status_ = dart_launch_opening_status;
 
-            // // 升降机装填控制
-            // switch (fsm.custom<Dart_FSM>()->ActionRemoteandReload_Slidedown_State)
-            // {
-            // case 0:
-            //     if (xTaskGetTickCount() - fsm.custom<Dart_FSM>()->ActionGeneral_Timer3_ >
-            //         pdMS_TO_TICKS(CONFIG_LAUNCH_WAIT_TIME))
-            //     {
-            //         fsm.custom<Dart_FSM>()->ActionRemoteandReload_Slidedown_State = 1;
-            //     }
-            //     break;
-            // case 1:
-            //     // 触发下滑
-            //     if (fsm.custom<Dart_FSM>()->ActionReload_Slidedown_Judge)
-            //     {
-            //         fsm.custom<Dart_FSM>()->ActionRemoteandReload_Slidedown_State = 2;
-            //         setSlidedownServotoSlide();
-            //         fsm.custom<Dart_FSM>()->ActionGeneral_Timer2_ = xTaskGetTickCount();
-            //     }
-            //     break;
-            // case 2:
-            //     if (xTaskGetTickCount() - fsm.custom<Dart_FSM>()->ActionGeneral_Timer2_ >
-            //         pdMS_TO_TICKS(CONFIG_SLIDE_SERVO_WAIT_TIME))
-            //     {
-            //         fsm.custom<Dart_FSM>()->ActionRemoteandReload_Slidedown_State = 3;
-            //         setSlidedownServotoCut();
-            //         // 操作完成，触发升降机下落和装填
-            //         fsm.custom<Dart_FSM>()->ActionRemoteandReload_Reload_State = 1;
-            //     }
-            //     break;
-            // case 3:
-            //     break;
-            // default:
-            //     fsm.custom<Dart_FSM>()->ActionRemoteandReload_Slidedown_State = 1;
-            // }
-
-            // 读取裁判系统变量，线程安全
+             // 读取裁判系统变量，线程安全
+            uint8_t game_progress = ext_game_status.game_progress;
+            uint16_t latest_launch_cmd_time = ext_dart_client_cmd.latest_launch_cmd_time;
+            uint8_t dart_remaining_time = ext_dart_info.dart_remaining_time;
+            uint16_t dart_info = ext_dart_info.dart_info;
+            state_machine::E_Target_Type target_type;
+            target_type = static_cast<E_Target_Type>((dart_info >> 8) & 0x03);
 #ifndef CONFIG_SIMULATE_DART_LAUNCH_OPENING_STATUS
             uint8_t dart_launch_opening_status = ext_dart_client_cmd.dart_launch_opening_status;
 #else CONFIG_SIMULATE_DART_LAUNCH_OPENING_STATUS
             uint8_t dart_launch_opening_status = simulateDartGateState();
 #endif
-            uint8_t game_progress = ext_game_status.game_progress;
-            uint8_t dart_remaining_time = ext_dart_info.dart_remaining_time;
-            uint16_t latest_launch_cmd_time = ext_dart_client_cmd.latest_launch_cmd_time;
-            uint16_t dart_info = ext_dart_info.dart_info;
-            state_machine::E_Target_Type target_type;
-            target_type = static_cast<E_Target_Type>((dart_info >> 8) & 0x03);
 
-            // 等待发射信号
+            // 等待发射信号和预发射信号
             // 比赛内开启飞镖闸门就预位准备发射，最速化发射
             bool launch_grant_ = false;
 
             // ====== 自动信号域 ======
+#ifndef CONFIG_SIMULATE_DART_LAUNCH_OPENING_STATUS
+            // TODO:左摇杆拨中时，屏蔽以下信号
+            if (RC_Data.Switch_Left != RC_SW_UP)
+            {
+                // 发射信号一：裁判系统飞镖闸门从“正在运动”达到“完全开启”信号，同时比赛正常进行中
+                launch_grant_ |= (last_dart_launch_opening_status_ == E_Gate_State::OPERATING &&
+                                dart_launch_opening_status == E_Gate_State::OPENED &&
+                                game_progress == 4);
 
-            // 信号一：裁判系统飞镖闸门从“正在开启”达到“完全开启”信号，同时比赛正常进行中
-            launch_grant_ |= (last_dart_launch_opening_status_ == E_Gate_State::OPERATING &&
-                              dart_launch_opening_status == E_Gate_State::OPENED &&
-                              game_progress == 4);
-
-            pre_launch_grant |= (last_dart_launch_opening_status_ == E_Gate_State::CLOSED &&
-                                 dart_launch_opening_status == E_Gate_State::OPERATING &&
+                // 发射信号二：飞镖发射剩余时间变化，时间落在20s内，而且比赛进行中
+                launch_grant_ |= (dart_remaining_time > 2 &&
+                                 dart_remaining_time <= 20 &&
                                  game_progress == 4);
 
-            // 信号二：飞镖发射剩余时间变化，时间落在15s内，而且比赛进行中
-            launch_grant_ |= (dart_remaining_time > 0 &&
-                              dart_remaining_time <= 15 &&
-                              game_progress == 4);
-            // TODO: 真正比赛删掉,因为信号二在没有官方闸门的情况下无效
-            launch_grant_ |= dart_launch_opening_status == E_Gate_State::OPENED;
+                // 预发射信号一：裁判系统飞镖发射站从从“完全关闭”到“完全开启”中
+                pre_launch_grant |= (last_dart_launch_opening_status_ == E_Gate_State::CLOSED &&
+                                     dart_launch_opening_status == E_Gate_State::OPERATING &&
+                                     game_progress == 4);
+            }
+#else CONFIG_SIMULATE_DART_LAUNCH_OPENING_STATUS
+            // 发射信号一：模拟飞镖发射站闸门从“正在运动”达到“完全开启”且比赛正常进行中
+            launch_grant_ |= (last_dart_launch_opening_status_ == E_Gate_State::OPERATING &&
+                              dart_launch_opening_status == E_Gate_State::OPENED);
 
-            // 信号三：选手端手动发送触发
+            // 发射信号二：飞镖发射剩余时间变化，时间落在20s内，而且比赛进行中
+            // 飞镖发射站闸门打开即可发射，方便平常测镖
+            launch_grant_ |= (dart_remaining_time > 2 &&
+                             dart_remaining_time <= 20 &&
+                             game_progress == 4) ||
+                             dart_launch_opening_status == E_Gate_State::OPENED;
+
+            // 预发射信号一：模拟飞镖发射站闸门从"完全关闭"到“正在运动”中
+            pre_launch_grant |= (last_dart_launch_opening_status_ == E_Gate_State::CLOSED &&
+                                 dart_launch_opening_status == E_Gate_State::OPERATING &&
+                                 (game_progress == 0 || game_progress == 4));
+#endif
+
+            // 发射信号三：选手端手动发送触发
             // 比赛状态确认
             if (latest_launch_cmd_time != 0 &&
                 latest_launch_cmd_time != last_dart_launch_time_ &&
@@ -1564,12 +1632,12 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                 launch_grant_ = true;
             }
 
-            // 自动信号触发时均要求二连发
+            // 自动信号触发时均要求连发
             if (launch_grant_)
                 fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = true;
 
             // ===== 手动信号域 =====
-            // 信号四：遥控器信号 外八字，不要求比赛进行中 要求不在上场模式
+            // 发射信号四：遥控器信号 外八字；如果在上场模式，则需要在比赛正常进行状
             if (((RC_Data.ch0 > 1400 && RC_Data.ch2 < 400) && (!match_flag_)) ||
                 ((RC_Data.ch0 > 1400 && RC_Data.ch2 < 400) && game_progress == 4 && (match_flag_))) {
                 launch_grant_ = true;
@@ -1581,13 +1649,17 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                     fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = true;
             }
 
-            // 门控 比赛时间不足\准备阶段\自检时\自瞄进行中\闸门不在打开状态 拒绝发射
-            if ((ext_game_status.stage_remain_time < 10 && game_progress == 4) || game_progress == 1 ||
-                game_progress == 2 || game_progress == 3 || game_progress == 5 ||
-                dart_launch_opening_status != E_Gate_State::OPENED) {
+            // 预发射信号二：遥控器信号 内八字；如果在上场模式，则需要在比赛正常进行状态
+            pre_launch_grant |= ((RC_Data.ch2 > 1400 && RC_Data.ch0 < 400) && (!match_flag_) ||
+                                (RC_Data.ch2 > 1400 && RC_Data.ch0 < 400) && game_progress == 4 && (match_flag_));
+
+            // 拒绝发射：门控、比赛时间不足\准备阶段\自检时\自瞄进行中
+            if ((((ext_game_status.stage_remain_time < 4 || dart_remaining_time < 3) && game_progress == 4) ||
+                game_progress == 1 ||game_progress == 2 ||
+                game_progress == 3 || game_progress == 5)){
                 launch_grant_ = false;
                 fsm.custom<Dart_FSM>()->ActionMatch_Wait_Continuous_Fire = false;
-            }
+                }
 
             last_dart_launch_opening_status_ = dart_launch_opening_status;
 
@@ -1677,19 +1749,6 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                     break;
             }
 
-            if (pre_launch_grant)
-            {
-                char msg1[40];
-                sprintf(msg1, "dart_launch_process: %d, pre_launch_grant in reload", msgDartStatus.dart_launch_process);
-                dart_mcu_log(msg1);
-            }
-            if (launch_grant_)
-            {
-                char msg2[40];
-                sprintf(msg2, "dart_launch_process: %d, launch_grant in reload", msgDartStatus.dart_launch_process);
-                dart_mcu_log(msg2);
-            }
-
             // 设置Load电机速度
             motor_controller::MotorLoadController[0].target_velocity_ =
                     base_velocity + motor_controller::MotorLoadSyncController.output;
@@ -1709,12 +1768,14 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
         }
 
         void update(OpenFSM &fsm) const override {
+            setNextStateByRemote(false, true);
+
             motor::MotorLoad[0].setNextState(motor::E_MotorState::RUNNING);
             motor::MotorLoad[1].setNextState(motor::E_MotorState::RUNNING);
 
             motor_controller::MotorLoadController[0].target_velocity_ = 0;
             motor_controller::MotorLoadController[1].target_velocity_ = 0;
-            setNextStateByRemote(false, true);
+
         }
 
         void exit(OpenFSM &fsm) const override {
