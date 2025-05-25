@@ -51,6 +51,12 @@ def generate_launch_description():
     node_dart_app = Node(
         package="dart_launcher",
         executable="node_dart_app",
+        parameters=[
+            os.path.join(
+                home_path,
+                "dart-ros2-workspace/src/dart_launcher/config/node_dart_app.yaml",
+            )
+        ],
         output="screen",
     )
 

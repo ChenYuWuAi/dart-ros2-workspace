@@ -74,7 +74,7 @@ ament_target_dependencies(node_dart_param_gateway rclcpp std_msgs dart_msgs std_
 add_executable(node_dart_launcher_lifecycle src/node_dart_launcher_lifecycle.cpp)
 ament_target_dependencies(node_dart_launcher_lifecycle rclcpp std_msgs dart_msgs std_srvs std_msgs lifecycle_msgs rclcpp_lifecycle)
 # Add node_dart_app target
-add_executable(node_dart_app src/node_dart_app.cpp src/get_ip.cpp)
+add_executable(node_dart_app src/node_dart_app.cpp)
 ament_target_dependencies(node_dart_app rclcpp_lifecycle rclcpp std_msgs dart_msgs std_srvs sensor_msgs cv_bridge)
 
 # Add Lvgl OpenCV

@@ -226,11 +226,11 @@ private:
         if (g_signal_received.load())
         {
             RCLCPP_INFO(get_logger(), "Signal received, initiating shutdown sequence...");
-            shutdown_all();
-            RCLCPP_INFO(get_logger(), "All nodes shutdown transitions triggered.");
-
             // Play shutdown sound
             buzzer_sound_effect(BuzzerSound::BuzzerWin10Remove);
+
+            shutdown_all();
+            RCLCPP_INFO(get_logger(), "All nodes shutdown transitions triggered.");
 
             // Shutdown the node
             RCLCPP_INFO(get_logger(), "Shutting down lifecycle manager...");

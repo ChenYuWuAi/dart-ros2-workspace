@@ -336,7 +336,7 @@ void NodeDartApp::screen_main_loop()
 
       // 初始化下拉菜单
       lv_dropdown_clear_options(guider_ui.scrStatistic_ddlistLifeSpanSelect);
-      lv_dropdown_add_option(guider_ui.scrStatistic_ddlistLifeSpanSelect, "总计", LV_DROPDOWN_POS_LAST);
+      lv_dropdown_add_option(guider_ui.scrStatistic_ddlistLifeSpanSelect, "总次数", LV_DROPDOWN_POS_LAST);
       lv_dropdown_add_option(guider_ui.scrStatistic_ddlistLifeSpanSelect, "滑台", LV_DROPDOWN_POS_LAST);
       lv_dropdown_add_option(guider_ui.scrStatistic_ddlistLifeSpanSelect, "扳机", LV_DROPDOWN_POS_LAST);
       lv_dropdown_add_option(guider_ui.scrStatistic_ddlistLifeSpanSelect, "缓冲打印件", LV_DROPDOWN_POS_LAST);
@@ -444,6 +444,12 @@ void NodeDartApp::screen_main_loop()
         }
       }
 
+      // 检查缓冲有效性
+      if (!draw_buf->data || draw_buf->header.cf != LV_COLOR_FORMAT_RGB565)
+      {
+        RCLCPP_ERROR(get_logger(), "画布缓冲无效或格式不匹配");
+        return;
+      }
       // 切换缓冲
       if (buf_index == 0)
         lv_canvas_set_draw_buf(guider_ui.scrVision_canvasVision, &draw_buf0);
@@ -470,8 +476,8 @@ void NodeDartApp::screen_main_loop()
     // 控制更新频率
     static auto last_update_time = std::chrono::steady_clock::now();
     auto now = std::chrono::steady_clock::now();
-    if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_update_time).count() < 500 && last_obj == lv_scr_act())
-      return; // 每500毫秒更新一次
+    if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_update_time).count() < 1000 && last_obj == lv_scr_act())
+      return; // 每1000毫秒更新一次
     std::string sysinfo;
 
     // ====网络信息====
@@ -480,7 +486,7 @@ void NodeDartApp::screen_main_loop()
     sysinfo += "IPv4: " + ip_address_ + "\n";
 
     // IPv6
-    std::string ipv6 = "未知";
+    std::string ipv6 = "N/A";
     std::array<std::string, 2> interfaces = {"wlan0", "eth0"};
     for (const auto &iface : interfaces)
     {
@@ -502,7 +508,7 @@ void NodeDartApp::screen_main_loop()
     sysinfo += "IPv6: " + ipv6 + "\n";
 
     // SSID
-    std::string ssid = "未知";
+    std::string ssid = "N/A";
     std::string cmd_ssid = "iwgetid -r";
     FILE *fp_ssid = popen(cmd_ssid.c_str(), "r");
     if (fp_ssid)
@@ -520,7 +526,7 @@ void NodeDartApp::screen_main_loop()
     // ====负载信息====
     sysinfo += "====负载信息====\n";
     // Temp
-    std::string temp = "未知";
+    std::string temp = "N/A";
     FILE *fp_temp = fopen("/sys/class/thermal/thermal_zone0/temp", "r");
     if (fp_temp)
     {
@@ -587,7 +593,7 @@ void NodeDartApp::screen_main_loop()
     }
     else
     {
-      sysinfo += "Mem: 未知\n";
+      sysinfo += "Mem: N/A\n";
     }
 
     // 更新到UI
@@ -756,7 +762,7 @@ void NodeDartApp::update_network_status()
   if (operating_)
     return; // 防止重复操作
   // 自动检测wlan0和eth0，优先wlan0
-  std::string ip = "未知";
+  std::string ip = "N/A";
   std::array<std::string, 2> interfaces = {"wlan0", "eth0"};
   bool found_ip = false;
   for (const auto &iface : interfaces)
@@ -1021,6 +1027,37 @@ extern "C" bool reset_component_life_count_from_ui(const char *component_name)
     return g_node->reset_component_life_count(component_name);
   }
   return false;
+}
+
+// 联网
+extern "C" void connect_to_wifi(const char *ssid)
+{
+  static bool operating = false;
+
+  // 检查合法性
+  if (!ssid || std::string(ssid).empty())
+  {
+    RCLCPP_ERROR(g_node->get_logger(), "SSID不能为空");
+    return;
+  }
+
+  if (operating)
+    return;
+  operating = true;
+
+  RCLCPP_INFO(g_node->get_logger(), "正在尝试连接WiFi: %s", ssid);
+
+  std::string ssid_str = ssid;
+  std::thread([ssid_str]() {
+    std::string cmd = "nmcli con up \"" + ssid_str + "\"";
+    int ret = system(cmd.c_str());
+    if (ret == 0) {
+      RCLCPP_INFO(g_node->get_logger(), "已尝试连接WiFi: %s", ssid_str.c_str());
+    } else {
+      RCLCPP_ERROR(g_node->get_logger(), "连接WiFi失败: %s", ssid_str.c_str());
+    }
+    operating = false;
+  }).detach();
 }
 
 // 主函数
