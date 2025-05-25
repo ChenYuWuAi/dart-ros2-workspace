@@ -50,7 +50,7 @@ class LifecycleManager : public rclcpp::Node
 {
 public:
     LifecycleManager()
-        : Node("lifecycle_manager")
+        : Node("lifecycle_manager", rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true))
     {
         // 注册信号处理函数
         std::signal(SIGUSR1, signal_handler); // 用户自定义信号1
@@ -58,8 +58,12 @@ public:
         RCLCPP_INFO(get_logger(), "Signal handlers registered for SIGTERM, SIGINT, and SIGUSR1");
 
         // Load nodes from ROS parameters
-        this->declare_parameter<std::vector<std::string>>("nodes", {"node_dart_param_gateway",
-                                                                    "node_dart_launcher_detector"});
+        if (!this->has_parameter("nodes"))
+        {
+            this->declare_parameter<std::vector<std::string>>("nodes", {"node_dart_param_gateway",
+                                                                        "node_dart_launcher_detector"});
+        }
+        
         nodes_ = this->get_parameter("nodes").as_string_array();
 
         for (const auto &node_name : nodes_)

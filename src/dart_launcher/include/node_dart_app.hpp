@@ -8,6 +8,8 @@
 #include <thread>
 #include <string>
 #include <filesystem>
+#include <vector>
+#include <deque>
 
 // LVGL相关头文件
 #include "lvgl/lvgl.h"
@@ -41,7 +43,7 @@ using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface
 class NodeDartApp : public rclcpp_lifecycle::LifecycleNode
 {
 public:
-  explicit NodeDartApp(const std::string &node_name, bool intra_process_comms = false);
+  NodeDartApp(rclcpp::NodeOptions options);
   virtual ~NodeDartApp();
 
   // 生命周期节点回调函数
@@ -51,6 +53,7 @@ public:
   CallbackReturn on_cleanup(const rclcpp_lifecycle::State &);
   CallbackReturn on_shutdown(const rclcpp_lifecycle::State &);
   CallbackReturn on_error(const rclcpp_lifecycle::State &);
+  bool reset_component_life_count(const std::string &component_name);
 
 private:
   // 互斥锁
@@ -82,11 +85,29 @@ private:
   sensor_msgs::msg::CompressedImage qrcode_image_;
   sensor_msgs::msg::CompressedImage greenlight_image_;
 
+  // 飞镖发射统计数据
+  struct DartLaunchRecord
+  {
+    uint64_t time;     // 发射时间戳
+    float speed;       // 发射速度
+    uint32_t sequence; // 发射序号
+  };
+  std::string statistics_file_path_;                 // 统计数据文件路径
+  std::deque<DartLaunchRecord> dart_launch_records_; // 最近的发射记录
+  uint64_t last_recorded_launch_time_;               // 上次记录的发射时间
+  uint32_t total_launch_count_;                      // 总发射次数
+
+  // 元件寿命统计
+  std::map<std::string, uint32_t> component_life_counts_; // 元件使用次数统计
+
   // 私有方法
   void timer_callback_ui();
   void update_greenlight_image(sensor_msgs::msg::CompressedImage::SharedPtr msg);
   void update_qrcode_image(sensor_msgs::msg::CompressedImage::SharedPtr msg);
   void update_network_status();
+  void check_dart_launch();
+  bool load_launch_statistics();
+  bool save_launch_statistics();
 
   void screen_main_loop();
 
@@ -134,7 +155,7 @@ static void lv_linux_disp_init(void)
   const int height = atoi(getenv("LV_SDL_VIDEO_HEIGHT") ?: "480");
   lv_sdl_window_create(width, height);
   lv_sdl_mouse_create();
-  
+
   SDL_ShowCursor(SDL_DISABLE);
 }
 #else

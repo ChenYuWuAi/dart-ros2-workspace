@@ -1,5 +1,6 @@
-/node_dart_launcher_lifecycle:
+/lifecycle_manager:
   ros__parameters:
     nodes:
       - "/node_dart_launcher_detector"
       - "/node_dart_param_gateway"
+      - "/node_dart_app"

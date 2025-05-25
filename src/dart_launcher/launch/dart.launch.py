@@ -48,6 +48,12 @@ def generate_launch_description():
         output="screen",
     )
 
+    node_dart_app = Node(
+        package="dart_launcher",
+        executable="node_dart_app",
+        output="screen",
+    )
+
     # # 定时调用 lifecycle 命令，先 transition 到 'configure'
     # configure_dart_launcher_detector_transition = TimerAction(
     #     period=4.0,  # 延时 4 秒后执行
@@ -114,6 +120,7 @@ def generate_launch_description():
             node_dart_param_gateway,
             node_dart_launcher_detector,
             node_dart_launcher_lifecycle,
+            node_dart_app,
             # configure_dart_launcher_detector_transition,
             # activate_dart_launcher_detector_transition,
             # configure_node_dart_param_gateway_transition,
