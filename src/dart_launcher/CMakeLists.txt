@@ -70,7 +70,7 @@ target_include_directories(node_dart_param_gateway PRIVATE thirdparty/json/inclu
 target_link_directories(node_dart_param_gateway PRIVATE nlohmann_json::nlohmann_json)
 ament_target_dependencies(node_dart_param_gateway rclcpp std_msgs dart_msgs std_srvs rclcpp_lifecycle)
 
-# # 看门狗
+# 看门狗
 add_executable(node_dart_launcher_lifecycle src/node_dart_launcher_lifecycle.cpp)
 ament_target_dependencies(node_dart_launcher_lifecycle rclcpp std_msgs dart_msgs std_srvs std_msgs lifecycle_msgs rclcpp_lifecycle)
 # Add node_dart_app target
@@ -131,9 +131,15 @@ target_link_libraries(node_dart_app lvgl lvgl::thorvg nlohmann_json::nlohmann_js
 # add_executable(dart_calibration src/dart_calibration.cpp src/dart_algorithm.cpp)
 # target_link_libraries(dart_calibration yaml-cpp ${GSL_LIBRARIES} ${GSL_CBLAS_LIBRARIES})
 
+# node_dart_logger
+add_executable(node_dart_logger src/node_dart_logger.cpp)
+target_include_directories(node_dart_logger PRIVATE include)
+ament_target_dependencies(node_dart_logger rclcpp std_msgs dart_msgs std_srvs rclcpp_lifecycle)
+
 install(TARGETS
     node_dart_app
     node_dart_param_gateway
+    node_dart_logger
     # node_dart_config
     node_dart_launcher_lifecycle
     # dart_calibration

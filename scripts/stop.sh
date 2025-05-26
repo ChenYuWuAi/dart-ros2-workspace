@@ -9,15 +9,15 @@ if [ -n "$LIFECYCLE_PID" ]; then
     # 发送SIGUSR1信号
     kill -USR1 $LIFECYCLE_PID
 
-    # 等待最多3秒，让关闭流程开始
+    # 等待最多5秒，让关闭流程开始
     echo "等待关闭流程开始..."
-    sleep 3
+    sleep 5
 else
     echo "未找到node_dart_launcher_lifecycle进程"
 fi
 
 # 如果超时或未能正常关闭，强制终止所有相关进程
 echo "强制终止所有剩余的ROS节点..."
-pkill -f "dart-ros2-workspace/install" && pkill -f "dart.launch.py"
+pkill -f "dart-ros2-workspace/install" -9 && pkill -f "dart.launch.py"
 
 exit 0
