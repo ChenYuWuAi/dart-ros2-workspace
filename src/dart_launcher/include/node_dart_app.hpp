@@ -105,7 +105,7 @@ private:
   void update_greenlight_image(sensor_msgs::msg::CompressedImage::SharedPtr msg);
   void update_qrcode_image(sensor_msgs::msg::CompressedImage::SharedPtr msg);
   void update_network_status();
-  void check_dart_launch();
+  void check_dart_launch(dart_msgs::msg::DartLauncherStatus::SharedPtr msg);
   bool load_launch_statistics();
   bool save_launch_statistics();
 

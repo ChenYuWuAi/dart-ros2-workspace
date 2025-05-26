@@ -94,7 +94,7 @@ CallbackReturn NodeDartApp::on_configure(const rclcpp_lifecycle::State &)
         if (msg->last_launch_time != dart_launcher_status_.last_launch_time &&
             msg->last_launch_time > 0)
         {
-          check_dart_launch();
+          check_dart_launch(msg);
         }
 
         dart_launcher_status_ = *msg;
@@ -814,23 +814,18 @@ void NodeDartApp::update_qrcode_image(sensor_msgs::msg::CompressedImage::SharedP
 }
 
 // 检查飞镖发射并更新统计数据
-void NodeDartApp::check_dart_launch()
+void NodeDartApp::check_dart_launch(dart_msgs::msg::DartLauncherStatus::SharedPtr msg)
 {
-  // 确保发射时间已经更新
-  if (dart_launcher_status_.last_launch_time <= last_recorded_launch_time_)
-  {
-    return;
-  }
-
   // 更新记录的发射时间
-  RCLCPP_INFO(get_logger(), "检测到新的飞镖发射，时间: %lu, 速度: %.2f",
-              dart_launcher_status_.last_launch_time,
-              dart_launcher_status_.last_launch_speed);
+  RCLCPP_INFO(get_logger(), "检测到新的飞镖发射，时间: %lu, 速度: %.2f, 发射序列号: %u",
+              msg->last_launch_time,
+              msg->last_launch_speed,
+              msg->dart_launch_process);
 
   // 创建新的发射记录
   DartLaunchRecord record;
-  record.time = dart_launcher_status_.last_launch_time;
-  record.speed = dart_launcher_status_.last_launch_speed;
+  record.time = msg->last_launch_time;
+  record.speed = msg->last_launch_speed;
   record.sequence = ++total_launch_count_;
 
   // 添加到发射记录队列
@@ -851,7 +846,7 @@ void NodeDartApp::check_dart_launch()
   component_life_counts_["rubber"]++;  // 皮筋
 
   // 保存到文件
-  last_recorded_launch_time_ = dart_launcher_status_.last_launch_time;
+  last_recorded_launch_time_ = msg->last_launch_time;
   save_launch_statistics();
 }
 
