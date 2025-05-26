@@ -24,7 +24,7 @@
 
 // 定义通信协议相关常量
 #define SOF_BYTE 0xA5
-#define UART_DEVICE "/dev/ttyUSB1"
+#define UART_DEVICE "/dev/ttyUSB0"
 #define UART_BAUD_RATE B115200
 
 // crc8 generator polynomial:G(x)=x8+x5+x4+1
@@ -542,6 +542,17 @@ void convert_endianness_for_transmission(const void *input, void *output, size_t
  */
 bool send_judge_system_data(int fd, uint16_t cmd_id, const uint8_t *data, uint16_t data_len, uint8_t seq = 0)
 {
+    // 1% 随机丢包
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    static std::uniform_int_distribution<> dis(1, 100);
+
+    if (dis(gen) == 1)
+    {
+        std::cout << "[模拟丢包] 本次数据未发送 (1%)" << std::endl;
+        return true;
+    }
+
     std::vector<uint8_t> packet = pack_judge_system_data(cmd_id, data, data_len, seq);
 
     // 发送数据
