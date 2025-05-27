@@ -20,7 +20,7 @@
 #define CONFIG_SLIDE_SERVO_WAIT_TIME 330
 #define CONFIG_TRIGGER_SERVO_WAIT_TIME 500
 #define CONFIG_LIFT_WAIT_TIME 700
-#define CONFIG_LAUNCH_WAIT_TIME 400
+#define CONFIG_LAUNCH_WAIT_TIME 800
 #define CONFIG_LAUNCH_WAIT_MOTOR_STABLE_TIME 500
 
 // 丝杆电机复位堵转速度
@@ -74,9 +74,11 @@
 // Publisher定义
 #define LOG_BUF_LEN 128
 // 队列长度
+
 #define LOG_QUEUE_LEN 10
 
-#define CONFIG_SIMULATE_DART_LAUNCH_OPENING_STATUS
+// #define CONFIG_SIMULATE_DART_LAUNCH_OPENING_STATUS
+// #define CONFIG_TRIGGER_SERVO_DEBUG_MODE
 
 extern dart_msgs__msg__DartLauncherParams msgDartParams;
 extern dart_msgs__msg__DartLauncherParams msgDartProtocols;
