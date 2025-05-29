@@ -32,6 +32,7 @@ bool NodeDartParamGateway::load_params_from_file(std::string database_path)
 {
     std::ifstream dart_param_file(database_path + "/dart_param.json");
     std::ifstream dart_protocols_file(database_path + "/dart_protocols.json");
+    std::ifstream dart_avc_file(database_path + "/dart_avc.json");
 
     if (dart_param_file.is_open())
     {
@@ -77,6 +78,31 @@ bool NodeDartParamGateway::load_params_from_file(std::string database_path)
         return false;
     }
 
+    if (dart_avc_file.is_open())
+    {
+        try
+        {
+            json avc_json;
+            dart_avc_file >> avc_json;
+            dart_avc_file.close();
+            std::lock_guard<std::mutex> lock(avc_mutex_);
+            avc_.enabled = avc_json["enabled"].get<bool>();
+            // expected_velocities
+            avc_.expected_velocities = avc_json["expected_velocities"].get<std::vector<double>>();
+            RCLCPP_INFO(get_logger(), "Loaded Adaptive Velocity Control parameters from file.");
+        }
+        catch (const std::exception &e)
+        {
+            RCLCPP_WARN_STREAM(get_logger(), "Failed to load Adaptive Velocity Control parameters from file: " << e.what());
+            return false;
+        }
+    }
+    else
+    {
+        RCLCPP_WARN(get_logger(), "Failed to open Adaptive Velocity Control file: %s/dart_avc.json", database_path.c_str());
+        return false;
+    }
+
     return true;
 }
 
@@ -84,6 +110,7 @@ bool NodeDartParamGateway::save_params_to_file(std::string database_path)
 {
     std::ofstream dart_param_file(database_path + "/dart_param.json");
     std::ofstream dart_protocols_file(database_path + "/dart_protocols.json");
+    std::ofstream dart_avc_file(database_path + "/dart_avc.json");
 
     if (dart_param_file.is_open())
     {
@@ -126,6 +153,33 @@ bool NodeDartParamGateway::save_params_to_file(std::string database_path)
         RCLCPP_WARN(get_logger(), "Failed to open DartProtocols file for writing: %s/dart_protocols.json", database_path.c_str());
         return false;
     }
+
+    if (dart_avc_file.is_open())
+    {
+        try
+        {
+            json avc_json;
+            {
+                std::lock_guard<std::mutex> lock(avc_mutex_);
+                avc_json["enabled"] = avc_.enabled;
+                avc_json["expected_velocities"] = avc_.expected_velocities;
+            }
+            dart_avc_file << avc_json.dump(4); // Pretty print with 4 spaces
+            dart_avc_file.close();
+            RCLCPP_INFO(get_logger(), "Saved Adaptive Velocity Control parameters to file.");
+        }
+        catch (const std::exception &e)
+        {
+            RCLCPP_WARN_STREAM(get_logger(), "Failed to save Adaptive Velocity Control parameters to file: " << e.what());
+            return false;
+        }
+    }
+    else
+    {
+        RCLCPP_WARN(get_logger(), "Failed to open Adaptive Velocity Control file for writing: %s/dart_avc.json", database_path.c_str());
+        return false;
+    }
+
     return true;
 }
 
@@ -428,6 +482,26 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
         block_param_update_ingame_ = false;
         RCLCPP_WARN(get_logger(), "block_param_update_ingame parameter not set, defaulting to false.");
     }
+
+    // 声明自适应弹速控制相关参数
+    if (!this->has_parameter("adaptive_velocity_control.velocity_dead_zone"))
+        this->declare_parameter("adaptive_velocity_control.velocity_dead_zone", 0.3);
+    if (!this->has_parameter("adaptive_velocity_control.linear_coefficient"))
+        this->declare_parameter("adaptive_velocity_control.linear_coefficient", 10000.0);
+
+    // 初始化自适应弹速控制参数
+    std::lock_guard<std::mutex> lock(avc_mutex_);
+    avc_.velocity_dead_zone = this->get_parameter("adaptive_velocity_control.velocity_dead_zone").as_double();
+    avc_.linear_coefficient = this->get_parameter("adaptive_velocity_control.linear_coefficient").as_double();
+
+    RCLCPP_INFO(get_logger(), "自适应弹速控制参数: dead_zone=%.2f, linear_coefficient=%.2f",
+                avc_.enabled ? "true" : "false", avc_.velocity_dead_zone, avc_.linear_coefficient);
+
+    // 打印expected velocities
+    RCLCPP_INFO(get_logger(), "Expected velocities: %.2f, %.2f, %.2f, %.2f",
+                avc_.expected_velocities[0], avc_.expected_velocities[1],
+                avc_.expected_velocities[2], avc_.expected_velocities[3]);
+
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
 
@@ -465,6 +539,34 @@ void NodeDartParamGateway::process_qr_code(const std_msgs::msg::String::SharedPt
             tmp.last_param_update_time = now_ms; // protocols本地更新时间
             target_dart_protocols_ = tmp;
             RCLCPP_INFO(get_logger(), "Updated DartProtocols from QR code, set last_param_update_time=%lu", now_ms);
+
+            // 处理自适应弹速控制参数
+            if (j.contains("adaptive_velocity_control"))
+            {
+                std::lock_guard<std::mutex> lock(avc_mutex_);
+                auto &avc_json = j["adaptive_velocity_control"];
+
+                if (avc_json.contains("adaptive_velocity_enabled"))
+                {
+                    avc_.enabled = avc_json["adaptive_velocity_enabled"].get<bool>();
+                }
+
+                if (avc_json.contains("adaptive_velocity_expected"))
+                {
+                    auto &velocities = avc_json["adaptive_velocity_expected"];
+                    if (velocities.is_array() && velocities.size() >= 4)
+                    {
+                        for (size_t i = 0; i < 4 && i < velocities.size(); i++)
+                        {
+                            avc_.expected_velocities[i] = std::stod(velocities[i].get<std::string>());
+                        }
+                    }
+                    RCLCPP_INFO(get_logger(), "Set expected velocities: %.2f, %.2f, %.2f, %.2f",
+                                avc_.expected_velocities[0], avc_.expected_velocities[1],
+                                avc_.expected_velocities[2], avc_.expected_velocities[3]);
+                }
+            }
+
             save_params_to_file(database_path);
 
             // 发布扬声器信息
@@ -505,6 +607,15 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
         {
             last_status_time_ = this->now();
             mcu_online_ = true;
+
+            // 检测飞镖发射并处理自适应弹速控制
+            if (msg->dart_state == 105 &&
+                msg->last_launch_time != dart_status_.last_launch_time && msg->last_launch_time != 0)
+            {
+                // 有新的发射
+                handle_dart_launch(msg->dart_launch_process, msg->last_launch_speed);
+            }
+
             dart_status_ = *msg;
         });
 
@@ -632,6 +743,97 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn NodeDa
     }
 
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
+}
+
+// 处理飞镖发射的自适应弹速控制
+void NodeDartParamGateway::handle_dart_launch(uint8_t dart_launch_process, double actual_velocity)
+{
+    bool need_save = false;
+    std::string database_path;
+
+    {
+        // 检查自适应弹速控制是否启用
+        std::lock_guard<std::mutex> lock(avc_mutex_);
+        if (!avc_.enabled || dart_launch_process >= 4)
+        {
+            return;
+        }
+
+        uint8_t slot_index = dart_launch_process;
+        double expected_velocity = avc_.expected_velocities[slot_index];
+
+        // 检查速度是否在合理范围内
+        if (actual_velocity <= 14.1 || expected_velocity <= 14.1)
+        {
+            RCLCPP_WARN(get_logger(), "Invalid velocity detected: actual=%.2f, expected=%.2f",
+                        actual_velocity, expected_velocity);
+            return;
+        }
+
+        // 计算误差值
+        double velocity_error = actual_velocity - expected_velocity;
+        RCLCPP_INFO(get_logger(), "Dart #%d launch detected: actual=%.2f, expected=%.2f, error=%.2f",
+                    slot_index, actual_velocity, expected_velocity, velocity_error);
+
+        // 检查误差是否超过死区
+        if (std::abs(velocity_error) <= avc_.velocity_dead_zone)
+        {
+            RCLCPP_INFO(get_logger(), "Velocity error within dead zone (±%.2f), no adjustment needed",
+                        avc_.velocity_dead_zone);
+            return;
+        }
+
+        // 计算力量偏移量调整值
+        int32_t force_offset_adjustment = calculate_force_offset(actual_velocity, expected_velocity);
+
+        // 更新参数
+        int32_t current_offset = target_dart_protocols_.primary_force_offset;
+        int32_t new_offset = current_offset + force_offset_adjustment;
+
+        // 更新参数，由线程自动发布
+        target_dart_protocols_.primary_force_offset = new_offset;
+        target_dart_protocols_.last_param_update_time = get_ros_time_ms(*this->get_clock());
+
+        RCLCPP_INFO(get_logger(), "Adjusting primary_force_offset: %d -> %d (delta: %d), last_update_time=%lu",
+                    current_offset, new_offset, force_offset_adjustment, target_dart_protocols_.last_param_update_time);
+
+        need_save = true;
+    }
+
+    // 保存到文件（不持有锁）
+    if (need_save && this->get_parameter("param_database_path", database_path))
+    {
+        save_params_to_file(database_path);
+    }
+}
+
+// 计算力量偏移量
+int32_t NodeDartParamGateway::calculate_force_offset(double actual_velocity, double expected_velocity)
+{
+    double velocity_error = actual_velocity - expected_velocity;
+
+    // 获取当前的线性系数参数（如果已设置）
+    if (!this->has_parameter("adaptive_velocity_control.linear_coefficient"))
+    {
+        this->declare_parameter("adaptive_velocity_control.linear_coefficient", avc_.linear_coefficient);
+    }
+    double linear_coefficient = this->get_parameter("adaptive_velocity_control.linear_coefficient").as_double();
+
+    // 简单线性调整: 误差 * 系数
+    int32_t force_offset = static_cast<int32_t>(velocity_error * linear_coefficient);
+
+    // 限制调整幅度
+    const int32_t MAX_ADJUSTMENT = 600000;
+    if (force_offset > MAX_ADJUSTMENT)
+    {
+        force_offset = MAX_ADJUSTMENT;
+    }
+    else if (force_offset < -MAX_ADJUSTMENT)
+    {
+        force_offset = -MAX_ADJUSTMENT;
+    }
+
+    return force_offset;
 }
 
 int main(int argc, char **argv)

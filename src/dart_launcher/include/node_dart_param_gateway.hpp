@@ -7,6 +7,7 @@
 
 #include <thread>
 #include <chrono>
+#include <mutex> // 添加互斥锁
 
 // ROS2 Lifecycle Node
 #include <rclcpp/rclcpp.hpp>
@@ -37,6 +38,15 @@ using json = nlohmann::json;
 #define CONFIG_PATH "/home/chenyu/dart-ros2-workspace/install/dart_launcher/share/dart_launcher/config" + "dart_launcher_params.json"
 #endif
 
+// 自适应弹速控制结构体
+struct AdaptiveVelocityControl {
+    bool enabled = false;
+    std::vector<double> expected_velocities = {0.0, 0.0, 0.0, 0.0}; // 预期速度值
+    uint64_t last_launch_time = 0; // 上次发射时间
+    double velocity_dead_zone = 0.3; // 速度误差死区
+    double linear_coefficient = 10000.0; // 线性调整系数
+};
+
 class NodeDartParamGateway : public rclcpp_lifecycle::LifecycleNode
 {
 public:
@@ -57,6 +67,11 @@ public:
 
 private:
     void daemon_thread_func();
+    // 自适应弹速控制相关方法
+    void update_adaptive_velocity_control();
+    int32_t calculate_force_offset(double actual_velocity, double expected_velocity);
+    void handle_dart_launch(uint8_t dart_launch_process, double actual_velocity = 0.0);
+    
     // ROS2 Lifecycle Node
     rclcpp::Node::SharedPtr node_;
 
@@ -76,13 +91,13 @@ private:
     // Dart_param (用于保存目标参数和上传的参数)
     dart_msgs::msg::DartLauncherParams target_dart_param_;
     dart_msgs::msg::DartLauncherParams target_dart_protocols_;
-
-    // Dart_status (包含实际从MCU接收到的params和protocols)
     dart_msgs::msg::DartLauncherStatus dart_status_;
-
-    // 上次从MCU接收到Status的时间，用于判断MCU节点是否在线
     rclcpp::Time last_status_time_;
     bool mcu_online_;
+
+    // 自适应弹速控制
+    AdaptiveVelocityControl avc_;
+    std::mutex avc_mutex_; // 用于自适应弹速控制的互斥锁
 
     bool block_param_update_ingame_;
 

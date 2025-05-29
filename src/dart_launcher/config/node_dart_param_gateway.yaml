@@ -2,3 +2,6 @@
   ros__parameters:
     param_database_path: "/home/ubuntu/dart-ros2-workspace/src/dart_launcher/config"
     block_param_update_ingame: false
+    adaptive_velocity_control:
+      velocity_dead_zone: 0.05  # 速度误差死区，单位 m/s
+      linear_coefficient: 3000000.0  # 线性调整系数
