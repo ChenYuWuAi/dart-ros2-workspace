@@ -56,8 +56,11 @@ public:
   bool reset_component_life_count(const std::string &component_name);
 
 private:
-  // 互斥锁
-  std::mutex mutex_ui_;
+  // 互斥锁，使用定时锁防止死锁
+  std::timed_mutex mutex_ui_;
+  
+  // 线程控制
+  std::atomic<bool> ui_thread_running_{true};
 
   std::string ip_address_;
   bool is_online_ = false;
@@ -105,7 +108,7 @@ private:
   void update_greenlight_image(sensor_msgs::msg::CompressedImage::SharedPtr msg);
   void update_qrcode_image(sensor_msgs::msg::CompressedImage::SharedPtr msg);
   void update_network_status();
-  void check_dart_launch();
+  void check_dart_launch(dart_msgs::msg::DartLauncherStatus::SharedPtr msg);
   bool load_launch_statistics();
   bool save_launch_statistics();
 
@@ -116,12 +119,23 @@ private:
   friend void with_ui_lock(std::shared_ptr<NodeDartApp> node, Func func);
 };
 
-// 互斥锁包装函数
+// 尝试定时锁包装函数，避免与UI线程产生死锁
 template <typename Func>
 void with_ui_lock(std::shared_ptr<NodeDartApp> node, Func func)
 {
-  std::lock_guard<std::mutex> lock(node->mutex_ui_);
-  func(); // 调用传递的lambda表达式
+  if (!node) {
+    RCLCPP_ERROR(rclcpp::get_logger("node_dart_app"), "无效的节点指针，UI操作被跳过");
+    return;
+  }
+  // 尝试获取锁，超时则跳过
+  using namespace std::chrono_literals;
+  if (!node->mutex_ui_.try_lock_for(1000ms)) {
+    RCLCPP_WARN(rclcpp::get_logger("node_dart_app"), "UI锁占用，操作被跳过");
+    return;
+  }
+  // 成功获取锁后执行UI操作
+  func();
+  node->mutex_ui_.unlock();
 }
 
 // 全局UI实例
