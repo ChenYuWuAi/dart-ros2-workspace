@@ -347,7 +347,11 @@ bool NodeDartLogger::check_status_changes(
     status_info += "裁判系统: " + std::string(msg->judge_online ? "在线" : "离线") + ", ";
     status_info += "遥控器: " + std::string(msg->rc_online ? "在线" : "离线") + ", ";
     status_info += "发射架状态: " + std::to_string(msg->dart_state) + ", ";
-    status_info += "发射进程: " + std::to_string(msg->dart_launch_process);
+    status_info += "发射进程: " + std::to_string(msg->dart_launch_process) + ", ";
+    /// 电机相关角度Dump
+    status_info += "Yaw角度: " + std::to_string(msg->motor_yaw_angle) + ", ";
+    status_info += "Trigger角度: " + std::to_string(msg->motor_trigger_angle) + ", ";
+
     RCLCPP_INFO(get_logger(), "%s", status_info.c_str());
   }
 

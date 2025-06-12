@@ -763,7 +763,7 @@ void NodeDartParamGateway::handle_dart_launch(uint8_t dart_launch_process, doubl
         double expected_velocity = avc_.expected_velocities[slot_index];
 
         // 检查速度是否在合理范围内
-        if (actual_velocity <= 14.1 || expected_velocity <= 14.1)
+        if (actual_velocity <= 17.1 || expected_velocity <= 17.1 || actual_velocity >= 19.1 || expected_velocity >= 19.1) 
         {
             RCLCPP_WARN(get_logger(), "Invalid velocity detected: actual=%.2f, expected=%.2f",
                         actual_velocity, expected_velocity);

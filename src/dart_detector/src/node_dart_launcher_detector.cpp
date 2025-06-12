@@ -393,6 +393,11 @@ void NodeDartLauncherDetector::camera_thread(std::shared_ptr<CameraDriver> camer
             message.location.z = 0.0;
             greenlight_publisher_->publish(message);
 
+            // 写Log
+            if (is_detected)
+                RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000, "Green light detection from %s camera: location=(%.2f, %.2f)",
+                                     camera_name.c_str(), filtered_x, filtered_y);
+
             std_msgs::msg::Header header;
             header.stamp = this->now();
 
@@ -413,7 +418,7 @@ void NodeDartLauncherDetector::camera_thread(std::shared_ptr<CameraDriver> camer
                                      10000, "Greenlight processing time exceeded target frame time: %ld ms", processing_time);
             }
         }
-        
+
         // 终止视频录制
         if (save_video && video_writer.isOpened())
         {
