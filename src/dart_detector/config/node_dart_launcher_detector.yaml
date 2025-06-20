@@ -29,7 +29,7 @@
         Resolution: [1280, 1024]
       
       save_video:
-        enable: true
+        enable: false
         path: "/home/ubuntu/dart-ros2-workspace/videos/greenlight_detect"
     detect:
       greenlight_detect:
