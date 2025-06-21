@@ -93,7 +93,7 @@ void microros_node_task(void) {
     msgDartStatus.params = msgDartParams;
     msgDartStatus.protocols = msgDartProtocols;
 
-    soundEffectManager.begin(&htim12, &htim6, TIM_CHANNEL_1, HAL_RCC_GetPCLK2Freq());
+    soundEffectManager.begin(&htim2, &htim6, TIM_CHANNEL_4, HAL_RCC_GetPCLK2Freq());
     LED::led_flow.begin();
     trigger_servo[0].begin(&htim4, TIM_CHANNEL_1, HAL_RCC_GetPCLK2Freq(), 500, 2500, 0, 180, 10000, 100,
                            CONFIG_TRIGGER_SERVO_RELOAD_ANGLE_0);
