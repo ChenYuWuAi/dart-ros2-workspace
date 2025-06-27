@@ -433,15 +433,10 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                                                    yaw_switch_state,
                                                    CONFIG_TARGET_RESET_VELOCITY_YAWLS) ==
                        E_ResetActionReturnState::Finished;
-            success &= actionResetMotorUntilBlocked(motor_controller::MotorTriggerLSController,
-                                                    CONFIG_TARGET_RESET_VELOCITY_TRIGGERLS,
-                                                    CONFIG_GATE_VELOCITY_TRIGGERLS,
-                                                    CONFIG_GATE_CURRENT_TRIGGERLS,
-                                                    pdMS_TO_TICKS(CONFIG_TIMEOUT_RESET_TRIGGER),
-                                                    fsm.custom<Dart_FSM>()->ActionGeneral_Timer0_,
-                                                    fsm.custom<Dart_FSM>()->ActionResetMotors_TriggerLS_Reset_State,
-                                                    false) ==
-                       E_ResetActionReturnState::Finished;
+            success &= actionResetLSUntilTrigger<>(motor_controller::MotorTriggerLSController,
+                                                   trigger_switch_state,
+                                                   CONFIG_TARGET_RESET_VELOCITY_TRIGGERLS) ==
+                        E_ResetActionReturnState::Finished;
             success &= actionResetMotorUntilBlocked(motor_controller::MotorLoadController[0],
                                                     CONFIG_TARGET_RESET_VELOCITY_LOAD,
                                                     CONFIG_GATE_VELOCITY_LOAD,
@@ -735,16 +730,21 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                     } else {
                         if (motor_controller::MotorTriggerLSController.state_ !=
                             motor_controller::E_PID_Velocity_Angle_Controller_State::VELOCITY_CONTROL)
+                        {
                             motor_controller::MotorTriggerLSController.set_state(
                                     motor_controller::E_PID_Velocity_Angle_Controller_State::VELOCITY_CONTROL);
-                        if (RC_Data.ch2 <= 600)
+                            motor_controller::MotorTriggerLSController.target_velocity_ = 0;
+                        }
+                        if (RC_Data.ch2 <= 600  && trigger_switch_state != Triggered)
                             motor_controller::MotorTriggerLSController.target_velocity_ = -8000;
-                        else if (RC_Data.ch2 > 600 && RC_Data.ch2 <= 800)
+                        else if (RC_Data.ch2 > 600 && RC_Data.ch2 <= 800  && trigger_switch_state != Triggered)
                             motor_controller::MotorTriggerLSController.target_velocity_ = -1000;
                         else if (RC_Data.ch2 >= 1200 && RC_Data.ch2 < 1410)
                             motor_controller::MotorTriggerLSController.target_velocity_ = 1000;
                         else if (RC_Data.ch2 >= 1410)
                             motor_controller::MotorTriggerLSController.target_velocity_ = 8000;
+                        else if (RC_Data.ch2 <= 800 && trigger_switch_state == Triggered)
+                            motor_controller::MotorTriggerLSController.target_velocity_ = 0;
                     }
                 }
                 // Load电机控制，后面的代码操作优先
