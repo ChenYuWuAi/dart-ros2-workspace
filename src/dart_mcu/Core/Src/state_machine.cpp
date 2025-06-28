@@ -748,7 +748,7 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                     }
                 }
                 // Load电机控制，后面的代码操作优先
-                // < --- 950 --- 中点 --- 1400 --- >
+                // < --- 624 --- 中点(1024) --- 1424 --- >
                 // Load导轨状态机
                 // 0. Lock状态：Load电机不动，均角度闭环在当前位置
                 // 1. Operating to Reload状态：Load电机向下运动到装填位置
@@ -763,8 +763,8 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                             // 状态转移
                             if (RC_Data.ch3 >= 1600) {
                                 fsm.custom<Dart_FSM>()->ActionRemote_MotorLoad_State = 2;
-                            } else if ((RC_Data.ch3 > 1400 && RC_Data.ch3 < 1600) |
-                                       (RC_Data.ch3 >= 366 && RC_Data.ch3 < 950)) {
+                            } else if ((RC_Data.ch3 > 1424 && RC_Data.ch3 < 1600) |
+                                       (RC_Data.ch3 >= 366 && RC_Data.ch3 < 624)) {
                                 fsm.custom<Dart_FSM>()->ActionRemote_MotorLoad_State = 3;
                             } else if (RC_Data.ch3 < 366) {
                                 fsm.custom<Dart_FSM>()->ActionRemote_MotorLoad_State = 1;
@@ -786,7 +786,7 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                         case 2:
                             base_velocity = -CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
                             // 状态转移
-                            if ((RC_Data.ch3 < 950) | (
+                            if ((RC_Data.ch3 < 624) | (
                                     motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
                                     CONFIG_MOTOR_LOAD_ANGLE_UP |
                                     motor_controller::MotorLoadController[1].current_angle_with_rounds_ <=
@@ -798,7 +798,7 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
 
                         case 3:
                             // 下
-                            if (RC_Data.ch3 <= 950 &&
+                            if (RC_Data.ch3 <= 624 &&
                                 !(motor_controller::MotorLoadController[0].current_angle_with_rounds_ >=
                                   CONFIG_MOTOR_LOAD_ANGLE_LAUNCH_DOWN |
                                   motor_controller::MotorLoadController[1].current_angle_with_rounds_ >=
@@ -806,7 +806,7 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                                 base_velocity = CONFIG_MOTOR_LOAD_OPERATION_VELOCITY_DOWNWARD;
                             }
                                 // 上
-                            else if (RC_Data.ch3 >= 1400 && !((
+                            else if (RC_Data.ch3 >= 1424 && !((
                                     motor_controller::MotorLoadController[0].current_angle_with_rounds_ <=
                                     CONFIG_MOTOR_LOAD_ANGLE_UP |
                                     motor_controller::MotorLoadController[1].current_angle_with_rounds_ <=
@@ -819,7 +819,7 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
                                 fsm.custom<Dart_FSM>()->ActionRemote_MotorLoad_State = 1;
                             } else if (RC_Data.ch3 >= 1600) {
                                 fsm.custom<Dart_FSM>()->ActionRemote_MotorLoad_State = 2;
-                            } else if (RC_Data.ch3 >= 950 && RC_Data.ch3 < 1400) {
+                            } else if (RC_Data.ch3 >= 624 && RC_Data.ch3 < 1424) {
                                 fsm.custom<Dart_FSM>()->ActionRemote_MotorLoad_State = 0;
                             }
 

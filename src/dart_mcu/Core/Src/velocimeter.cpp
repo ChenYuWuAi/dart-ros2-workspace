@@ -4,95 +4,183 @@
 
 #include "velocimeter.h"
 
-namespace meter {
-
+namespace meter
+{
     velocimeter velocity_meter;
 
-    void velocimeter::begin(TIM_HandleTypeDef *htim_begin, uint32_t channel_begin, TIM_HandleTypeDef *htim_end,
-                            uint32_t channel_end,
-                            uint32_t timer_period, std::function<void(float)> onVelocityUpdate,
-                            double distanceBetweenTwoPulse,
-                            double seconds_per_tick) {
-        this->htim_begin = htim_begin;
+    void velocimeter::begin(
+        TIM_HandleTypeDef* htim,
+        uint32_t channel_begin_rise,
+        uint32_t channel_begin_fall,
+        uint32_t channel_end_rise,
+        uint32_t channel_end_fall,
+        uint32_t timer_period,
+        std::function<void(float)> onVelocityUpdate,
+        double distanceBetweenTwoPulse,
+        double object_length,
+        double seconds_per_tick
+    )
+    {
+        this->htim_begin = htim;
         this->timer_period = timer_period;
         this->onVelocityUpdate = onVelocityUpdate;
         this->distanceBetweenTwoPulse = distanceBetweenTwoPulse;
         this->seconds_per_tick = seconds_per_tick;
-        this->channel_begin = channel_begin;
-        this->channel_end = channel_end;
+        this->object_length = object_length;
+        this->channel_gate1_rise = channel_begin_rise;
+        this->channel_gate1_fall = channel_begin_fall;
+        this->channel_gate2_rise = channel_end_rise;
+        this->channel_gate2_fall = channel_end_fall;
         state = IDLE;
         refresh_counter_timer = 0;
-        update_count_begin = 0;
-        update_count_end = 0;
-        begin_time = 0;
-        end_time = 0;
 
-        HAL_TIM_Base_Start_IT(htim_begin);
-        HAL_TIM_IC_Start_IT(htim_begin, channel_begin);
-        HAL_TIM_IC_Start_IT(htim_end, channel_end);
+        // 初始化双光电门相关
+        gate1_rise_tick = gate1_fall_tick = gate2_rise_tick = gate2_fall_tick = 0;
+        gate1_rise_overflow = gate1_fall_overflow = gate2_rise_overflow = gate2_fall_overflow = 0;
+        gate1_rise_valid = gate1_fall_valid = gate2_rise_valid = gate2_fall_valid = false;
+
+        HAL_TIM_Base_Start_IT(htim);
+        HAL_TIM_IC_Start_IT(htim, channel_begin_rise);
+        HAL_TIM_IC_Start_IT(htim, channel_begin_fall);
+        HAL_TIM_IC_Start_IT(htim, channel_end_rise);
+        HAL_TIM_IC_Start_IT(htim, channel_end_fall);
     }
 
-    void velocimeter::enable(bool oneshot) {
+    void velocimeter::enable(bool oneshot)
+    {
         HAL_GPIO_WritePin(GPIOH, GPIO_PIN_4, GPIO_PIN_SET);
         HAL_GPIO_WritePin(GPIOH, GPIO_PIN_5, GPIO_PIN_SET);
         prev_state = state;
         state = oneshot ? ONESHOT : CONTINOUS;
-        HAL_TIM_IC_Start_IT(htim_begin, channel_begin);
+        HAL_TIM_IC_Start_IT(htim_begin, channel_gate1_rise);
+        HAL_TIM_IC_Start_IT(htim_begin, channel_gate1_fall);
+        HAL_TIM_IC_Start_IT(htim_begin, channel_gate2_rise);
+        HAL_TIM_IC_Start_IT(htim_begin, channel_gate2_fall);
     }
 
-    void velocimeter::disable() {
+    void velocimeter::disable()
+    {
         HAL_GPIO_WritePin(GPIOH, GPIO_PIN_4, GPIO_PIN_RESET);
         HAL_GPIO_WritePin(GPIOH, GPIO_PIN_5, GPIO_PIN_RESET);
         prev_state = state;
         state = IDLE;
     }
 
-    void velocimeter::onUpdate(TIM_HandleTypeDef *htim) {
-        if (htim == htim_begin) {
+    void velocimeter::onUpdate(TIM_HandleTypeDef* htim)
+    {
+        if (htim == htim_begin)
+        {
             refresh_counter_timer++;
         }
     }
 
-    void velocimeter::onCaptureBegin(uint32_t count) {
-        if (state == CONTINOUS || state == ONESHOT) {
+    // 单独处理每个通道的捕获
+    void velocimeter::onCaptureGate1Rise(uint32_t count)
+    {
+        if (state == CONTINOUS || state == ONESHOT)
+        {
             prev_state = state;
             if (state == ONESHOT)
-                HAL_TIM_IC_Stop_IT(htim_begin, velocity_meter.channel_begin);
+            {
+                HAL_TIM_IC_Stop_IT(htim_begin, channel_gate1_rise);
+            }
             state = MEASURING;
-            update_count_begin = refresh_counter_timer;
-            begin_time = count;
+            gate1_rise_tick = count;
+            gate1_rise_overflow = refresh_counter_timer;
+            gate1_rise_valid = true;
         }
-            // 可能漏了一个 算一下时间 如果超时就再来一次ready
-        else if (state == MEASURING) {
-            // 计算速度
-            uint64_t ticks_diff = (refresh_counter_timer - update_count_begin) * timer_period + (count - begin_time);
+        else if (state == MEASURING)
+        {
+            // 可能漏了一个，判断超时或异常，重置
+            uint64_t ticks_diff = (refresh_counter_timer - gate1_rise_overflow) * timer_period + (count -
+                gate1_rise_tick);
             float velocity = distanceBetweenTwoPulse / (ticks_diff * seconds_per_tick);
-            if (velocity < 1) {
+            if (velocity < 1)
+            {
                 state = MEASURING;
-                update_count_begin = refresh_counter_timer;
-                begin_time = count;
-            } else if (velocity > 25) {
+                gate1_rise_overflow = refresh_counter_timer;
+                gate1_rise_tick = count;
+            }
+            else if (velocity > 25)
+            {
                 prev_state = state;
                 state = CONTINOUS;
             }
         }
     }
 
-    void velocimeter::onCaptureEnd(uint32_t count) {
-        if (state == MEASURING) {
-            update_count_end = refresh_counter_timer;
-            end_time = count;
-            // 计算速度
-            uint64_t ticks_diff = (update_count_end - update_count_begin) * timer_period + (end_time - begin_time);
-            float velocity = distanceBetweenTwoPulse / (ticks_diff * seconds_per_tick);
-            onVelocityUpdate(velocity);
-            state = prev_state == CONTINOUS ? CONTINOUS : IDLE;
-            prev_state = MEASURING;
+    void velocimeter::onCaptureGate1Fall(uint32_t count)
+    {
+        if (state == MEASURING)
+        {
+            gate1_fall_tick = count;
+            gate1_fall_overflow = refresh_counter_timer;
+            gate1_fall_valid = true;
         }
     }
 
-    void velocimeter::reset() {
+    void velocimeter::onCaptureGate2Rise(uint32_t count)
+    {
+        if (state == MEASURING)
+        {
+            gate2_rise_tick = count;
+            gate2_rise_overflow = refresh_counter_timer;
+            gate2_rise_valid = true;
+        }
+    }
+
+    void velocimeter::onCaptureGate2Fall(uint32_t count)
+    {
+        if (state == MEASURING && gate1_rise_valid && gate1_fall_valid && gate2_rise_valid)
+        {
+            gate2_fall_tick = count;
+            gate2_fall_overflow = refresh_counter_timer;
+            gate2_fall_valid = true;
+
+            // 计算三平均速度
+            uint64_t ticks1 = (gate1_fall_overflow - gate1_rise_overflow) * timer_period + (gate1_fall_tick -
+                gate1_rise_tick);
+            float v1 = (object_length > 0 && ticks1 > 0) ? (object_length / (ticks1 * seconds_per_tick)) : 0;
+
+            uint64_t ticks2 = (gate2_fall_overflow - gate2_rise_overflow) * timer_period + (gate2_fall_tick -
+                gate2_rise_tick);
+            float v2 = (object_length > 0 && ticks2 > 0) ? (object_length / (ticks2 * seconds_per_tick)) : 0;
+
+            uint64_t ticks12 = (gate2_rise_overflow - gate1_rise_overflow) * timer_period + (gate2_rise_tick -
+                gate1_rise_tick);
+            float v3 = (distanceBetweenTwoPulse > 0 && ticks12 > 0)
+                           ? (distanceBetweenTwoPulse / (ticks12 * seconds_per_tick))
+                           : 0;
+
+            float v_avg = (v1 + v2 + v3) / 3.0f;
+
+            bool valid = true;
+            // TODO:正式测镖速时，取消注释以下代码
+            // (v1 >= 1.0f && v1 <= 25.0f) &&
+            //          (v2 >= 1.0f && v2 <= 25.0f) &&
+            //          (v3 >= 1.0f && v3 <= 25.0f);
+
+            if (valid)
+            {
+                onVelocityUpdate(v_avg);
+                state = (prev_state == CONTINOUS) ? CONTINOUS : IDLE;
+                prev_state = MEASURING;
+            }
+            else
+            {
+                // 无效则继续MEASURING，等待下一组
+                state = MEASURING;
+            }
+
+            // 清空标志，准备下一次
+            gate1_rise_valid = gate1_fall_valid = gate2_rise_valid = gate2_fall_valid = false;
+        }
+    }
+
+    void velocimeter::reset()
+    {
         state = CONTINOUS;
+        // 清空双光电门标志
+        gate1_rise_valid = gate1_fall_valid = gate2_rise_valid = gate2_fall_valid = false;
     }
 }
-

@@ -327,16 +327,37 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
 }
 
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim) {
-    static bool begin = false;
+    static HAL_TIM_ActiveChannel last_channel = HAL_TIM_ACTIVE_CHANNEL_CLEARED;
     if (htim == &htim8) {
-        if (!begin && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1) {
-            meter::velocity_meter.onCaptureBegin(htim->Instance->CCR1);
-            begin = true;
-        } else if (begin && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_2) {
-            meter::velocity_meter.onCaptureEnd(htim->Instance->CCR2);
-            begin = false;
-        } else {
-            begin = false;
+        switch (htim->Channel) {
+            // TODO: 正式测镖速时应该将此处的通道号顺序改为实际使用的通道号顺序
+            case HAL_TIM_ACTIVE_CHANNEL_1:
+                if (last_channel == HAL_TIM_ACTIVE_CHANNEL_CLEARED) {
+                    meter::velocity_meter.onCaptureGate1Rise(__HAL_TIM_GET_COMPARE(&htim8, TIM_CHANNEL_1));
+                    last_channel = HAL_TIM_ACTIVE_CHANNEL_1;
+                }
+                break;
+            case HAL_TIM_ACTIVE_CHANNEL_2:
+                if (last_channel == HAL_TIM_ACTIVE_CHANNEL_1) {
+                    meter::velocity_meter.onCaptureGate1Fall(__HAL_TIM_GET_COMPARE(&htim8, TIM_CHANNEL_2));
+                    last_channel = HAL_TIM_ACTIVE_CHANNEL_2;
+                }
+                break;
+            case HAL_TIM_ACTIVE_CHANNEL_3:
+                if (last_channel == HAL_TIM_ACTIVE_CHANNEL_2) {
+                    meter::velocity_meter.onCaptureGate2Rise(__HAL_TIM_GET_COMPARE(&htim8, TIM_CHANNEL_3));
+                    last_channel = HAL_TIM_ACTIVE_CHANNEL_3;
+                }
+                break;
+            case HAL_TIM_ACTIVE_CHANNEL_4:
+                if (last_channel == HAL_TIM_ACTIVE_CHANNEL_3) {
+                    meter::velocity_meter.onCaptureGate2Fall(__HAL_TIM_GET_COMPARE(&htim8, TIM_CHANNEL_4));
+                    last_channel = HAL_TIM_ACTIVE_CHANNEL_CLEARED; // 重置状态
+                }
+                break;
+            default:
+                last_channel = HAL_TIM_ACTIVE_CHANNEL_CLEARED; // 未知通道，重置状态
+                break;
         }
     }
 }

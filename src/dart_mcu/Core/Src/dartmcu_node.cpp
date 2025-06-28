@@ -111,11 +111,14 @@ void microros_node_task(void) {
                            CONFIG_SLIDE_SERVO_CUT_ANGLE);
 
 
-    meter::velocity_meter.begin(&htim8, TIM_CHANNEL_1, &htim8, TIM_CHANNEL_2, 65536, [=](float velocity) {
-        velocity_meter_result.velocity = velocity;
-        velocity_meter_result.record_time = xTaskGetTickCount();
-        msgDartStatus.last_launch_speed = velocity_meter_result.velocity;
-    }, 0.139, 0.0000005);
+    meter::velocity_meter.begin(&htim8, TIM_CHANNEL_1, TIM_CHANNEL_2,
+                                TIM_CHANNEL_3, TIM_CHANNEL_4,
+                                65536, [=](float velocity)
+                                {
+                                    velocity_meter_result.velocity = velocity;
+                                    velocity_meter_result.record_time = xTaskGetTickCount();
+                                    msgDartStatus.last_launch_speed = velocity_meter_result.velocity;
+                                }, 0.139, 0.015, 0.0000005);
 
     xTaskCreate(state_machine::fsm_thread, "fsm_thread", 1024, NULL, 11, NULL);
 
