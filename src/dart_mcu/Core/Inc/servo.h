@@ -23,6 +23,8 @@ public:
 
     void setAngle(uint16_t angle);
 
+    uint16_t getAngle() const;
+
     void enable();
 
     void disable();

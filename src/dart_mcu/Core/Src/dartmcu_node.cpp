@@ -118,7 +118,7 @@ void microros_node_task(void) {
                                     velocity_meter_result.velocity = velocity;
                                     velocity_meter_result.record_time = xTaskGetTickCount();
                                     msgDartStatus.last_launch_speed = velocity_meter_result.velocity;
-                                }, 0.139, 0.015, 0.0000005);
+                                }, 0.139, 0.240, 0.0000005);
 
     xTaskCreate(state_machine::fsm_thread, "fsm_thread", 1024, NULL, 11, NULL);
 

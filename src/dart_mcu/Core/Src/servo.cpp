@@ -24,6 +24,11 @@ void servo::setAngle(uint16_t angle) {
     pwm_.setCompareValue(calCompareValue(angle));
 }
 
+uint16_t servo::getAngle() const {
+    uint32_t compareValue = pwm_.getCompareValue();
+    return (compareValue - minPulseWidth_) * (maxAngle_ - minAngle_) / (maxPulseWidth_ - minPulseWidth_) + minAngle_;
+}
+
 void servo::enable() {
     pwm_.start();
 }
