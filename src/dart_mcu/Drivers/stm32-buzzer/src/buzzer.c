@@ -25,7 +25,7 @@ void Buzzer_Note(Buzzer_HandleTypeDef *handle, uint32_t noteFreq) {
         return;
     }
     uint32_t clk = handle->Init.timerClockFreqHz;
-    uint32_t maxArr = 0xFFFF;
+    uint32_t maxArr = 0xFFFFFFFF;
     // 1）先按当前 PSC 计算周期
     uint32_t base = handle->Init.timer->Instance->PSC + 1;
     uint32_t ticks = clk / base / noteFreq;
@@ -39,6 +39,9 @@ void Buzzer_Note(Buzzer_HandleTypeDef *handle, uint32_t noteFreq) {
     // 3）设置 ARR 和 CCR（一半占空比）
     handle->Init.timer->Instance->ARR = ticks - 1;
     __HAL_TIM_SET_COMPARE(handle->Init.timer, handle->Init.channel, (ticks - 1) / 2);
+
+    // 触发更新事件，让 PSC/ARR 同步到影子寄存器
+    handle->Init.timer->Instance->EGR = TIM_EGR_UG;
 }
 
 void Buzzer_NoNote(Buzzer_HandleTypeDef *handle) {

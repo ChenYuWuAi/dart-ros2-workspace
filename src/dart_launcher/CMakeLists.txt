@@ -40,7 +40,7 @@ endif()
 
 # ========== Options ==========
 
-# ========== General Dependencies ==========
+# ========== General Dependencies =========
 # json and lvgl
 add_subdirectory(thirdparty)
 find_package(ament_cmake REQUIRED)
@@ -70,35 +70,45 @@ target_include_directories(node_dart_param_gateway PRIVATE thirdparty/json/inclu
 target_link_directories(node_dart_param_gateway PRIVATE nlohmann_json::nlohmann_json)
 ament_target_dependencies(node_dart_param_gateway rclcpp std_msgs dart_msgs std_srvs rclcpp_lifecycle)
 
-# # 看门狗
+# 看门狗
 add_executable(node_dart_launcher_lifecycle src/node_dart_launcher_lifecycle.cpp)
 ament_target_dependencies(node_dart_launcher_lifecycle rclcpp std_msgs dart_msgs std_srvs std_msgs lifecycle_msgs rclcpp_lifecycle)
 # Add node_dart_app target
-# add_executable(node_dart_app src/node_dart_app.cpp src/get_ip.cpp src/dart_config.cpp src/dart_algorithm.cpp)
-# ament_target_dependencies(node_dart_app rclcpp std_msgs dart_msgs std_srvs sensor_msgs cv_bridge)
+add_executable(node_dart_app src/node_dart_app.cpp)
+ament_target_dependencies(node_dart_app rclcpp_lifecycle rclcpp std_msgs dart_msgs std_srvs sensor_msgs cv_bridge)
 
-# # Add Lvgl support
-# target_include_directories(node_dart_app PRIVATE
-#     ${PROJECT_SOURCE_DIR}
-#     include
-#     src/generated src/custom src/generated/guider_customer_fonts src/generated/guider_fonts src/generated/images
-#     ${OpenCV_INCLUDE_DIRS}
-#     lvgl/include/lvgl
-# )
+# Add Lvgl OpenCV
+target_include_directories(node_dart_app PRIVATE
+    ${PROJECT_SOURCE_DIR}
+    include
+    thirdparty/dart-ui/generated thirdparty/dart-ui/custom thirdparty/dart-ui/generated/guider_customer_fonts thirdparty/dart-ui/generated/guider_fonts thirdparty/dart-ui/generated/images
+    ${OpenCV_INCLUDE_DIRS}
+    thirdparty/json/include
+)
+
+target_include_directories(lvgl PUBLIC thirdparty)
 
 # # 递归添加子目录${PROJECT_SOURCE_DIR}/generated/*
-# FILE(GLOB_RECURSE SOURCES src/custom/*.c src/custom/*.cpp /src/dart_config.cpp)
-# target_sources(node_dart_app PRIVATE ${SOURCES})
-# target_link_directories(node_dart_app PRIVATE lvgl/lib src/generated/lib)
+FILE(GLOB_RECURSE LV_SOURCES thirdparty/dart-ui/custom/*.c thirdparty/dart-ui/custom/*.cpp
+    thirdparty/dart-ui/generated/*.c thirdparty/dart-ui/generated/*.cpp
+    thirdparty/dart-ui/generated/guider_customer_fonts/*.c thirdparty/dart-ui/generated/guider_customer_fonts/*.cpp
+    thirdparty/dart-ui/generated/guider_fonts/*.c thirdparty/dart-ui/generated/guider_fonts/*.cpp
+    thirdparty/dart-ui/generated/images/*.c thirdparty/dart-ui/generated/images/*.cpp
+    ../dart_comm_share/src/dart_launcher_param.cpp
+)
+target_sources(node_dart_app PRIVATE ${LV_SOURCES})
 
-# if(BUILD_SHARED_LIBS)
-#     target_link_libraries(node_dart_app lvgl lv_drivers guider_generated ${OpenCV_LIBS} yaml-cpp ${GSL_LIBRARIES})
-# else()
-#     target_link_libraries(node_dart_app liblvgl.a liblv_drivers.a libguider_generated.a ${OpenCV_LIBS} yaml-cpp ${GSL_LIBRARIES})
-# endif()
+# LibDRM & SDL2
+include(${CMAKE_CURRENT_LIST_DIR}/thirdparty/lvgl/tests/FindLibDRM.cmake)
+include_directories(${Libdrm_INCLUDE_DIRS})
+target_include_directories(lvgl PUBLIC ${Libdrm_INCLUDE_DIRS})
 
-# target_link_libraries(node_dart_app)
+find_package(SDL2)
+find_package(SDL2_image)
+# include_directories(${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS})
 
+# target_link_libraries(node_dart_app lvgl lvgl::thorvg ${SDL2_LIBRARIES} ${SDL2_IMAGE_LIBRARIES} ${Libdrm_LIBRARIES} m pthread)
+target_link_libraries(node_dart_app lvgl lvgl::thorvg nlohmann_json::nlohmann_json ${SDL2_LIBRARIES} ${SDL2_IMAGE_LIBRARIES} m pthread)
 
 # # Add node_dart_config target
 # add_executable(node_dart_config src/node_dart_config.cpp src/dart_config.cpp)
@@ -121,9 +131,15 @@ ament_target_dependencies(node_dart_launcher_lifecycle rclcpp std_msgs dart_msgs
 # add_executable(dart_calibration src/dart_calibration.cpp src/dart_algorithm.cpp)
 # target_link_libraries(dart_calibration yaml-cpp ${GSL_LIBRARIES} ${GSL_CBLAS_LIBRARIES})
 
+# node_dart_logger
+add_executable(node_dart_logger src/node_dart_logger.cpp)
+target_include_directories(node_dart_logger PRIVATE include)
+ament_target_dependencies(node_dart_logger rclcpp std_msgs dart_msgs std_srvs rclcpp_lifecycle)
+
 install(TARGETS
-    # node_dart_app
+    node_dart_app
     node_dart_param_gateway
+    node_dart_logger
     # node_dart_config
     node_dart_launcher_lifecycle
     # dart_calibration

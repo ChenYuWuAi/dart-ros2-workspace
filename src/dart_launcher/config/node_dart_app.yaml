@@ -1,0 +1,3 @@
+/node_dart_app:
+  ros__parameters:
+    statistics_file: "/home/ubuntu/dart-ros2-workspace/src/dart_launcher/config/dart_launch_statistics.json"

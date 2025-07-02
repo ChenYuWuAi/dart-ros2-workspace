@@ -21,7 +21,6 @@ def generate_launch_description():
                 "dart-ros2-workspace/src/dart_launcher/config/node_dart_param_gateway.yaml",
             )
         ],
-        output="screen",
     )
 
     node_dart_launcher_detector = Node(
@@ -33,7 +32,6 @@ def generate_launch_description():
                 "dart-ros2-workspace/src/dart_detector/config/node_dart_launcher_detector.yaml",
             )
         ],
-        output="screen",
     )
 
     node_dart_launcher_lifecycle = Node(
@@ -45,7 +43,22 @@ def generate_launch_description():
                 "dart-ros2-workspace/src/dart_launcher/config/node_dart_launcher_lifecycle.yaml",
             )
         ],
-        output="screen",
+    )
+
+    node_dart_app = Node(
+        package="dart_launcher",
+        executable="node_dart_app",
+        parameters=[
+            os.path.join(
+                home_path,
+                "dart-ros2-workspace/src/dart_launcher/config/node_dart_app.yaml",
+            )
+        ],
+    )
+
+    node_dart_logger = Node(
+        package="dart_launcher",
+        executable="node_dart_logger",
     )
 
     # # 定时调用 lifecycle 命令，先 transition 到 'configure'
@@ -60,7 +73,7 @@ def generate_launch_description():
     #                 "/dart_launcher_detector",
     #                 "configure",
     #             ],
-    #             output="screen",
+    #          
     #         )
     #     ],
     # )
@@ -71,7 +84,7 @@ def generate_launch_description():
     #     actions=[
     #         ExecuteProcess(
     #             cmd=["ros2", "lifecycle", "set", "/dart_launcher_detector", "activate"],
-    #             output="screen",
+    #          
     #         )
     #     ],
     # )
@@ -87,7 +100,7 @@ def generate_launch_description():
     #                 "/node_dart_param_gateway",
     #                 "configure",
     #             ],
-    #             output="screen",
+    #          
     #         )
     #     ],
     # )
@@ -103,7 +116,7 @@ def generate_launch_description():
     #                 "/node_dart_param_gateway",
     #                 "activate",
     #             ],
-    #             output="screen",
+    #          
     #         )
     #     ],
     # )
@@ -114,6 +127,8 @@ def generate_launch_description():
             node_dart_param_gateway,
             node_dart_launcher_detector,
             node_dart_launcher_lifecycle,
+            node_dart_app,
+            node_dart_logger,
             # configure_dart_launcher_detector_transition,
             # activate_dart_launcher_detector_transition,
             # configure_node_dart_param_gateway_transition,

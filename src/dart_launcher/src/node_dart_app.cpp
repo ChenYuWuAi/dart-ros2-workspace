@@ -1,814 +1,1140 @@
-#include <node_lvgl_ui.hpp>
-#include <dart_algorithm.hpp>
+#include "node_dart_app.hpp"
 
-#include <custom.h>
 #include <thread>
 #include <fstream>
 #include <iostream>
 #include <chrono>
+#include <cmath>
+#include <functional>
+#include <memory>
+#include <nlohmann/json.hpp>
+#include "dart_comm_share/include/dart_launcher_param.h"
 
+using json = nlohmann::json;
 using namespace std::chrono_literals;
 using namespace std;
-using namespace DartConfig;
 
+// 全局变量
 lv_ui guider_ui;
-shared_ptr<NodeLVGLUI> node;
+shared_ptr<NodeDartApp> g_node;
 
-namespace fs = std::filesystem;
+// 构造函数
+NodeDartApp::NodeDartApp(rclcpp::NodeOptions options)
+    : rclcpp_lifecycle::LifecycleNode("node_dart_app", options),
+      last_recorded_launch_time_(0),
+      total_launch_count_(0),
+      ui_thread_running_(true)
+{
+  RCLCPP_INFO(get_logger(), "Lifecycle node [%s] started.", get_name());
 
-void NodeLVGLUI::timer_callback_ui()
+  // 声明并获取统计文件路径参数
+  if (!has_parameter("statistics_file"))
+  {
+    this->declare_parameter("statistics_file", "/home/ubuntu/dart-ros2-workspace/src/dart_launcher/config/dart_launch_statistics.json");
+    RCLCPP_WARN(get_logger(), "未设置统计文件路径，使用默认路径: /home/ubuntu/dart-ros2-workspace/src/dart_launcher/config/dart_launch_statistics.json");
+  }
+  statistics_file_path_ = this->get_parameter("statistics_file").as_string();
+  RCLCPP_INFO(get_logger(), "飞镖发射统计数据将保存至: %s", statistics_file_path_.c_str());
+
+  // 加载已有统计数据
+  if (!load_launch_statistics())
+  {
+    RCLCPP_WARN(get_logger(), "无法加载统计数据，将创建新的统计记录");
+  }
+
+  // 启动LVGL线程
+  ui_thread_ = std::make_shared<std::thread>(std::bind(&NodeDartApp::timer_callback_ui, this));
+
+  // 每5秒调用一次 update_network_status，避免阻塞主线程
+  timers_.push_back(
+      this->create_wall_timer(
+          5000ms,
+          [this]()
+          {
+            // 使用单独的线程执行，但限制同时只有一个线程在运行
+            static std::atomic<bool> is_updating(false);
+            if (!is_updating.exchange(true))
+            { // 如果当前没有线程在执行，则设置标志并执行
+              std::thread([this]()
+                          {
+                            this->update_network_status();
+                            is_updating.store(false); // 执行完成后重置标志
+                          })
+                  .detach();
+            }
+          }));
+}
+
+// 析构函数
+NodeDartApp::~NodeDartApp()
+{
+  // 设置终止标志
+  ui_thread_running_ = false;
+
+  // 确保UI线程已经退出
+  if (ui_thread_ && ui_thread_->joinable())
+  {
+    RCLCPP_INFO(get_logger(), "析构函数中等待UI线程结束...");
+    ui_thread_->join();
+    RCLCPP_INFO(get_logger(), "UI线程已在析构函数中结束");
+  }
+
+  RCLCPP_INFO(get_logger(), "Lifecycle node [%s] destroyed.", get_name());
+}
+
+// 配置回调
+CallbackReturn NodeDartApp::on_configure(const rclcpp_lifecycle::State &)
+{
+  RCLCPP_INFO(get_logger(), "Configuring...");
+
+  with_ui_lock(g_node, [&]()
+               {
+    // 设置UI Loader到33%
+    lv_label_set_text(guider_ui.scrLoader_labelLoader, "50%");
+    lv_arc_set_value(guider_ui.scrLoader_arcLoader, 50);
+    lv_label_set_text(guider_ui.scrLoader_labelLoadStage, "配置节点..."); });
+
+  // 创建订阅者
+  greenlight_image_sub_ = this->create_subscription<sensor_msgs::msg::CompressedImage>(
+      "/dart_launcher_detector/image/greenlight_processed", 10,
+      std::bind(&NodeDartApp::update_greenlight_image, this, std::placeholders::_1));
+
+  qrcode_image_sub_ = this->create_subscription<sensor_msgs::msg::CompressedImage>(
+      "/dart_launcher_detector/image/qrcode", 10,
+      std::bind(&NodeDartApp::update_qrcode_image, this, std::placeholders::_1));
+
+  dart_launcher_status_sub_ = this->create_subscription<dart_msgs::msg::DartLauncherStatus>(
+      "/dart_launcher_mcu/status", rclcpp::QoS(10).durability_volatile().best_effort(),
+      [this](const dart_msgs::msg::DartLauncherStatus::SharedPtr msg)
+      {
+        last_status_time_ = std::chrono::steady_clock::now();
+        mcu_online_ = true;
+
+        // 如果发射时间变化，说明有新的发射
+        if (msg->last_launch_time != dart_launcher_status_.last_launch_time &&
+            msg->last_launch_time > 0)
+        {
+          check_dart_launch(msg);
+        }
+
+        dart_launcher_status_ = *msg;
+      });
+
+  return CallbackReturn::SUCCESS;
+}
+
+void NodeDartApp::screen_main_loop()
+{
+  // 调试日志: 记录进入
+  RCLCPP_DEBUG(get_logger(), "Enter screen_main_loop, current screen obj: %p", lv_scr_act());
+  try {
+    // 如果在scrHome
+    static lv_obj_t *last_obj = nullptr;
+    if (lv_scr_act() == guider_ui.scrHome)
+    {
+      auto now = std::chrono::system_clock::now();
+      std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+      std::tm local_tm;
+      localtime_r(&now_c, &local_tm);
+      char datetime_buf[32];
+      std::strftime(datetime_buf, sizeof(datetime_buf), "%Y-%m-%d %H:%M", &local_tm);
+      lv_label_set_text(guider_ui.scrHome_labelDate, datetime_buf);
+
+      auto now_steady = std::chrono::steady_clock::now();
+      // 更新MCU工作状态
+      if (std::chrono::duration_cast<std::chrono::seconds>(now_steady - last_status_time_).count() > 1)
+      {
+        mcu_online_ = false;
+      }
+
+      // 控制网络图标的可见性
+      if (is_online_)
+      {
+        lv_obj_clear_flag(guider_ui.scrHome_imgIconWIFI, LV_OBJ_FLAG_HIDDEN); // 显示WiFi图标
+        lv_obj_add_flag(guider_ui.scrHome_imgIconNoWIFI, LV_OBJ_FLAG_HIDDEN); // 隐藏无网络图标
+      }
+      else
+      {
+        lv_obj_add_flag(guider_ui.scrHome_imgIconWIFI, LV_OBJ_FLAG_HIDDEN);     // 隐藏WiFi图标
+        lv_obj_clear_flag(guider_ui.scrHome_imgIconNoWIFI, LV_OBJ_FLAG_HIDDEN); // 显示无网络图标
+      }
+
+      std::string prompt = "";
+      static std::string last_prompt = "";
+      bool error_ = false;
+
+      if (mcu_online_ == false)
+      {
+        lv_label_set_text(guider_ui.scrHome_labelMCUMode, "未知");
+        prompt += "MCU";
+        error_ = true;
+      }
+      else
+      {
+        switch (dart_launcher_status_.dart_state)
+        {
+        case 100:
+          lv_label_set_text(guider_ui.scrHome_labelMCUMode, "复位模式");
+          break;
+        case 101:
+          lv_label_set_text(guider_ui.scrHome_labelMCUMode, "保护模式");
+          break;
+        case 102:
+          lv_label_set_text(guider_ui.scrHome_labelMCUMode, "遥控模式");
+          break;
+        case 103:
+          lv_label_set_text(guider_ui.scrHome_labelMCUMode, "比赛Enter");
+          break;
+        case 104:
+          lv_label_set_text(guider_ui.scrHome_labelMCUMode, "比赛Wait");
+          break;
+        case 105:
+          lv_label_set_text(guider_ui.scrHome_labelMCUMode, "比赛Launch");
+          break;
+        case 106:
+          lv_label_set_text(guider_ui.scrHome_labelMCUMode, "比赛Reload");
+          break;
+        case 107:
+          lv_label_set_text(guider_ui.scrHome_labelMCUMode, "比赛End");
+          break;
+        }
+
+        // 检查是否有错误，yaw_online trigger_online和judge_online
+        if (dart_launcher_status_.motor_yaw_online == false)
+        {
+          prompt += "Yaw电机 ";
+          error_ = true;
+        }
+        if (dart_launcher_status_.motor_trigger_online == false)
+        {
+          prompt += "Trigger电机 ";
+          error_ = true;
+        }
+        if (dart_launcher_status_.motor_loader_online[0] == false)
+        {
+          prompt += "Load0电机 ";
+          error_ = true;
+        }
+        if (dart_launcher_status_.motor_loader_online[1] == false)
+        {
+          prompt += "Load1电机 ";
+          error_ = true;
+        }
+        if (dart_launcher_status_.judge_online == false)
+        {
+          prompt += "裁判系统 ";
+          error_ = true;
+        }
+        if (dart_launcher_status_.rc_online == false)
+        {
+          prompt += "遥控 ";
+          error_ = true;
+        }
+      }
+
+      // 检查是否需要生成报错信息
+      if (!error_)
+      {
+        if (prompt != last_prompt || last_obj != lv_scr_act())
+          lv_label_set_text(guider_ui.scrHome_labelPrompt, "无异常");
+        lv_obj_set_style_text_color(guider_ui.scrHome_labelPrompt, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(guider_ui.scrHome_contText, lv_color_hex(0xffffff), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(guider_ui.scrHome_labelPrompt, lv_color_hex(0xffffff), LV_PART_MAIN | LV_STATE_DEFAULT);
+      }
+      else
+      {
+        prompt += "离线";
+        if (prompt != last_prompt || last_obj != lv_scr_act())
+          lv_label_set_text(guider_ui.scrHome_labelPrompt, prompt.c_str());
+        // 设置提示框颜色
+        lv_obj_set_style_text_color(guider_ui.scrHome_labelPrompt, lv_color_hex(0xffffff), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(guider_ui.scrHome_contText, lv_color_hex(0xFF9800), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(guider_ui.scrHome_labelPrompt, lv_color_hex(0xFF9800), LV_PART_MAIN | LV_STATE_DEFAULT);
+      }
+      last_prompt = std::string(lv_label_get_text(guider_ui.scrHome_labelPrompt));
+    }
+
+    else if (lv_scr_act() == guider_ui.scrParams)
+    {
+      // 更新参数界面，界面为表格格式tableDartStatus和tableDartParams
+      // 首次进入时初始化表格格式
+      if (last_obj != lv_scr_act())
+      {
+        // 初始化表格格式
+        lv_table_set_col_cnt(guider_ui.scrParams_tableDartParams, 2);
+        lv_table_set_row_cnt(guider_ui.scrParams_tableDartParams, 0);
+        lv_table_set_col_width(guider_ui.scrParams_tableDartParams, 0, 150);
+        lv_table_set_col_width(guider_ui.scrParams_tableDartParams, 1, 150);
+
+        lv_table_set_col_cnt(guider_ui.scrParams_tableDartStatus, 2);
+        lv_table_set_row_cnt(guider_ui.scrParams_tableDartStatus, 0);
+        lv_table_set_col_width(guider_ui.scrParams_tableDartStatus, 0, 150);
+        lv_table_set_col_width(guider_ui.scrParams_tableDartStatus, 1, 150);
+      }
+      // 更新表格内容
+      {
+        // 序列化状态和参数
+        json j_full = dart_launcher_status_;
+        json j_params;
+        if (param_edit_is_param == 0)
+          j_params = j_full["params"];
+        else
+          j_params = j_full["protocols"];
+
+        j_full.erase("params");
+        j_full.erase("protocols");
+        j_full.erase("header");
+
+        // 填充参数表格
+        int rows_params = (int)j_params.size();
+        lv_table_set_row_cnt(guider_ui.scrParams_tableDartParams, rows_params);
+        int row = 0;
+        for (auto &item : j_params.items())
+        {
+          const std::string &key = item.key();
+          std::string val = item.value().dump();
+          lv_table_set_cell_value(guider_ui.scrParams_tableDartParams, row, 0, key.c_str());
+          lv_table_set_cell_value(guider_ui.scrParams_tableDartParams, row, 1, val.c_str());
+          row++;
+        }
+
+        // 填充状态表格
+        int rows_status = (int)j_full.size();
+        lv_table_set_row_cnt(guider_ui.scrParams_tableDartStatus, rows_status);
+        row = 0;
+        for (auto &item : j_full.items())
+        {
+          const std::string &key = item.key();
+          std::string val = item.value().dump();
+          lv_table_set_cell_value(guider_ui.scrParams_tableDartStatus, row, 0, key.c_str());
+          lv_table_set_cell_value(guider_ui.scrParams_tableDartStatus, row, 1, val.c_str());
+          row++;
+        }
+      }
+    }
+    else if (lv_scr_act() == guider_ui.scrQRCode)
+    {
+      // 限制调用频率
+      static auto last_update_time = std::chrono::steady_clock::now();
+      auto now = std::chrono::steady_clock::now();
+      if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_update_time).count() < 500 && last_obj == lv_scr_act())
+        return; // 每500毫秒更新一次
+      // 序列化状态和参数
+      json j_full = dart_launcher_status_;
+      json j_params;
+      // 根据scrQRCode_tb
+
+      if (param_edit_is_param == 0)
+      {
+        j_params["command_type"] = "DartParams";
+        j_params["data"] = j_full["params"];
+      }
+      else
+      {
+        j_params["command_type"] = "DartProtocols";
+        j_params["data"] = j_full["protocols"];
+      }
+
+      // j_params序列化后填入
+      lv_qrcode_update(guider_ui.scrQRCode_qrcodeExport, j_params.dump().c_str(), j_params.dump().size());
+      last_update_time = now;
+    }
+
+    else if (lv_scr_act() == guider_ui.scrStatistic)
+    {
+      // 更新统计屏幕
+      if (last_obj != lv_scr_act())
+      {
+        // 初始化发射记录表格
+        lv_table_set_row_cnt(guider_ui.scrStatistic_tableDartLaunches, dart_launch_records_.size() + 1);
+        lv_table_set_cell_value(guider_ui.scrStatistic_tableDartLaunches, 0, 0, "序号");
+        lv_table_set_cell_value(guider_ui.scrStatistic_tableDartLaunches, 0, 1, "时间");
+        lv_table_set_cell_value(guider_ui.scrStatistic_tableDartLaunches, 0, 2, "速度");
+
+        // 初始化元件寿命表格
+        lv_table_set_row_cnt(guider_ui.scrStatistic_tableLifeSpan, 7); // 表头 + 6个元件
+        lv_table_set_cell_value(guider_ui.scrStatistic_tableLifeSpan, 0, 0, "元件");
+        lv_table_set_cell_value(guider_ui.scrStatistic_tableLifeSpan, 0, 1, "次数");
+
+        // 初始化下拉菜单
+        lv_dropdown_clear_options(guider_ui.scrStatistic_ddlistLifeSpanSelect);
+        lv_dropdown_add_option(guider_ui.scrStatistic_ddlistLifeSpanSelect, "总次数", LV_DROPDOWN_POS_LAST);
+        lv_dropdown_add_option(guider_ui.scrStatistic_ddlistLifeSpanSelect, "滑台", LV_DROPDOWN_POS_LAST);
+        lv_dropdown_add_option(guider_ui.scrStatistic_ddlistLifeSpanSelect, "扳机", LV_DROPDOWN_POS_LAST);
+        lv_dropdown_add_option(guider_ui.scrStatistic_ddlistLifeSpanSelect, "缓冲打印件", LV_DROPDOWN_POS_LAST);
+        lv_dropdown_add_option(guider_ui.scrStatistic_ddlistLifeSpanSelect, "下滑块", LV_DROPDOWN_POS_LAST);
+        lv_dropdown_add_option(guider_ui.scrStatistic_ddlistLifeSpanSelect, "皮筋", LV_DROPDOWN_POS_LAST);
+      }
+
+      // 更新发射记录表格数据
+      if (dart_launch_records_.size() > 0)
+      {
+        int row = 1;
+        for (auto it = dart_launch_records_.rbegin(); it != dart_launch_records_.rend(); ++it)
+        {
+          // 序号列
+          std::string seq_text = std::to_string(it->sequence);
+          lv_table_set_cell_value(guider_ui.scrStatistic_tableDartLaunches, row, 0, seq_text.c_str());
+
+          // 时间列
+          std::time_t time_val = static_cast<std::time_t>(it->time / 1000); // 假设时间戳是毫秒
+          std::tm tm_info;
+          localtime_r(&time_val, &tm_info);
+          char time_str[64];
+          std::strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", &tm_info);
+          lv_table_set_cell_value(guider_ui.scrStatistic_tableDartLaunches, row, 1, time_str);
+
+          // 速度列
+          std::string speed_text = std::to_string(it->speed);
+          // 保留两位小数
+          size_t pos = speed_text.find('.');
+          if (pos != std::string::npos && pos + 3 < speed_text.size())
+          {
+            speed_text = speed_text.substr(0, pos + 3);
+          }
+          lv_table_set_cell_value(guider_ui.scrStatistic_tableDartLaunches, row, 2, speed_text.c_str());
+
+          row++;
+        }
+      }
+
+      // 更新元件寿命表格
+      std::vector<std::pair<std::string, std::string>> components = {
+          {"总发射次数", "total"},
+          {"滑台", "slider"},
+          {"扳机", "trigger"},
+          {"缓冲打印件", "buffer"},
+          {"下滑块", "bottom"},
+          {"皮筋", "rubber"}};
+
+      for (size_t i = 0; i < components.size(); i++)
+      {
+        lv_table_set_cell_value(guider_ui.scrStatistic_tableLifeSpan, i + 1, 0, components[i].first.c_str());
+        std::string count_str = std::to_string(component_life_counts_[components[i].second]);
+        lv_table_set_cell_value(guider_ui.scrStatistic_tableLifeSpan, i + 1, 1, count_str.c_str());
+      }
+    }
+    else if (lv_scr_act() == guider_ui.scrVision)
+    {
+      // 确保 canvas 已初始化
+      if (!guider_ui.scrVision_canvasVision)
+        return;
+
+      try
+      {
+        // 更新视觉界面，双缓冲显示图像
+        LV_DRAW_BUF_DEFINE(draw_buf0, 426, 341, LV_COLOR_FORMAT_NATIVE);
+        LV_DRAW_BUF_DEFINE(draw_buf1, 426, 341, LV_COLOR_FORMAT_NATIVE);
+        static int buf_index = 0;
+        buf_index %= 2;
+
+        const char *title = lv_label_get_text(guider_ui.scrVision_labelTitle);
+        const sensor_msgs::msg::CompressedImage *msg = nullptr;
+        if (strcmp(title, "制导相机画面") == 0)
+        {
+          msg = &greenlight_image_;
+        }
+        else if (strcmp(title, "参数相机画面") == 0)
+        {
+          msg = &qrcode_image_;
+        }
+        if (!msg || msg->data.empty())
+          return;
+
+        cv::Mat img = cv_bridge::toCvCopy(*msg, sensor_msgs::image_encodings::BGR8)->image;
+        if (img.empty())
+          return;
+        cv::resize(img, img, cv::Size(426, 341), 0, 0, cv::INTER_LINEAR);
+
+        lv_draw_buf_t *draw_buf = (buf_index == 0) ? &draw_buf0 : &draw_buf1;
+        lv_image_header_t *header = &draw_buf->header;
+        if (header->cf == LV_COLOR_FORMAT_RGB565 && draw_buf->data)
+        {
+          uint32_t stride = header->stride;
+          uint8_t *data = draw_buf->data;
+          for (int row = 0; row < 341; ++row)
+          {
+            uint16_t *buf16 = reinterpret_cast<uint16_t *>(data + row * stride);
+            for (int col = 0; col < 426; ++col)
+            {
+              auto px = img.at<cv::Vec3b>(row, col);
+              uint16_t r = px[2] >> 3;
+              uint16_t g = px[1] >> 2;
+              uint16_t b = px[0] >> 3;
+              buf16[col] = (r << 11) | (g << 5) | b;
+            }
+          }
+        }
+
+        // 检查缓冲有效性
+        if (!draw_buf->data || draw_buf->header.cf != LV_COLOR_FORMAT_RGB565)
+        {
+          RCLCPP_ERROR(get_logger(), "画布缓冲无效或格式不匹配");
+          return;
+        }
+        // 切换缓冲
+        if (buf_index == 0)
+          lv_canvas_set_draw_buf(guider_ui.scrVision_canvasVision, &draw_buf0);
+        else
+          lv_canvas_set_draw_buf(guider_ui.scrVision_canvasVision, &draw_buf1);
+        buf_index++;
+      }
+      catch (const std::exception &e)
+      {
+        RCLCPP_ERROR(get_logger(), "scrVision 更新异常: %s", e.what());
+      }
+    }
+    else if (lv_scr_act() == guider_ui.scrSetup)
+    {
+      // 更新系统信息，格式
+      // ====网络信息====
+      // IPv4:
+      // IPv6:
+      // SSID:
+      // ====负载信息====
+      // Temp:
+      // CPU:
+      // Mem:
+      // 控制更新频率
+      static auto last_update_time = std::chrono::steady_clock::now();
+      auto now = std::chrono::steady_clock::now();
+      if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_update_time).count() < 1000 && last_obj == lv_scr_act())
+        return; // 每1000毫秒更新一次
+      std::string sysinfo;
+
+      // ====网络信息====
+      sysinfo += "====网络信息====\n";
+      // IPv4
+      sysinfo += "IPv4: " + ip_address_ + "\n";
+
+      // IPv6
+      std::string ipv6 = "N/A";
+      std::array<std::string, 2> interfaces = {"wlan0", "eth0"};
+      for (const auto &iface : interfaces)
+      {
+        std::string cmd = "ip -6 addr show " + iface + " | grep 'inet6 ' | awk '{print $2}' | cut -d'/' -f1 | head -n 1";
+        FILE *fp = popen(cmd.c_str(), "r");
+        if (fp)
+        {
+          char buf[128] = {0};
+          if (fgets(buf, sizeof(buf), fp))
+          {
+            ipv6 = std::string(buf);
+            ipv6.erase(ipv6.find_last_not_of(" \n\r\t") + 1);
+            if (!ipv6.empty())
+              break;
+          }
+          pclose(fp);
+        }
+      }
+      sysinfo += "IPv6: " + ipv6 + "\n";
+
+      // SSID
+      std::string ssid = "N/A";
+      std::string cmd_ssid = "iwgetid -r";
+      FILE *fp_ssid = popen(cmd_ssid.c_str(), "r");
+      if (fp_ssid)
+      {
+        char buf[128] = {0};
+        if (fgets(buf, sizeof(buf), fp_ssid))
+        {
+          ssid = std::string(buf);
+          ssid.erase(ssid.find_last_not_of(" \n\r\t") + 1);
+        }
+        pclose(fp_ssid);
+      }
+      sysinfo += "SSID: " + ssid + "\n";
+
+      // ====负载信息====
+      sysinfo += "====负载信息====\n";
+      // Temp
+      std::string temp = "N/A";
+      FILE *fp_temp = fopen("/sys/class/thermal/thermal_zone0/temp", "r");
+      if (fp_temp)
+      {
+        int t = 0;
+        if (fscanf(fp_temp, "%d", &t) == 1)
+        {
+          char temp_buf[32];
+          snprintf(temp_buf, sizeof(temp_buf), "%.1f'C", t / 1000.0);
+          temp = temp_buf;
+        }
+        fclose(fp_temp);
+      }
+      sysinfo += "Temp: " + temp + "\n";
+
+      // CPU
+      double cpu_usage = 0.0;
+      static long last_total = 0, last_idle = 0;
+      FILE *fp_cpu = fopen("/proc/stat", "r");
+      if (fp_cpu)
+      {
+        char line[256];
+        if (fgets(line, sizeof(line), fp_cpu))
+        {
+          long user, nice, system, idle, iowait, irq, softirq, steal;
+          sscanf(line, "cpu  %ld %ld %ld %ld %ld %ld %ld %ld",
+                 &user, &nice, &system, &idle, &iowait, &irq, &softirq, &steal);
+          long total = user + nice + system + idle + iowait + irq + softirq + steal;
+          long diff_total = total - last_total;
+          long diff_idle = idle - last_idle;
+          if (last_total != 0 && diff_total > 0)
+          {
+            cpu_usage = 100.0 * (diff_total - diff_idle) / diff_total;
+          }
+          last_total = total;
+          last_idle = idle;
+        }
+        fclose(fp_cpu);
+      }
+      char cpu_buf[32];
+      snprintf(cpu_buf, sizeof(cpu_buf), "%.1f%%", cpu_usage);
+      sysinfo += "CPU: " + std::string(cpu_buf) + "\n";
+
+      // Mem
+      long mem_total = 0, mem_free = 0, mem_available = 0;
+      FILE *fp_mem = fopen("/proc/meminfo", "r");
+      if (fp_mem)
+      {
+        char key[64];
+        long value;
+        while (fscanf(fp_mem, "%63s %ld kB\n", key, &value) == 2)
+        {
+          if (strcmp(key, "MemTotal:") == 0)
+            mem_total = value;
+          else if (strcmp(key, "MemAvailable:") == 0)
+            mem_available = value;
+        }
+        fclose(fp_mem);
+      }
+      char mem_buf[64];
+      if (mem_total > 0)
+      {
+        snprintf(mem_buf, sizeof(mem_buf), "%.1f%%", 100.0 * (mem_total - mem_available) / mem_total);
+        sysinfo += "Mem: " + std::string(mem_buf) + "\n";
+      }
+      else
+      {
+        sysinfo += "Mem: N/A\n";
+      }
+
+      // 更新到UI
+      lv_label_set_text(guider_ui.scrSetup_labelSystemStatus, sysinfo.c_str());
+      last_update_time = now;
+    }
+
+    last_obj = lv_scr_act();
+  }
+  catch (const std::exception &e) {
+    RCLCPP_ERROR(get_logger(), "screen_main_loop捕获异常: %s", e.what());
+  }
+  // 调试日志: 记录退出
+  RCLCPP_DEBUG(get_logger(), "Exit screen_main_loop");
+}
+
+// 激活回调
+CallbackReturn NodeDartApp::on_activate(const rclcpp_lifecycle::State &)
+{
+  RCLCPP_INFO(get_logger(), "Activating...");
+
+  // 加载初始数据
+  update_network_status();
+
+  RCLCPP_INFO(get_logger(), "Enabling LVGL input...");
+  // lv_linux_input_create();
+
+  with_ui_lock(g_node, [&]()
+               {
+    // 设置UI Loader到100%
+    lv_label_set_text(guider_ui.scrLoader_labelLoader, "100%");
+    lv_label_set_text(guider_ui.scrLoader_labelLoadStage, "激活节点...");
+    lv_arc_set_value(guider_ui.scrLoader_arcLoader, 100); });
+
+  thread([&]()
+         {
+          this_thread::sleep_for(1s); // 等待1秒
+    // 切换到主界面
+    with_ui_lock(g_node, [&]()
+    {
+      setup_scr_scrHome(&guider_ui);
+      lv_screen_load(guider_ui.scrHome);
+    }); })
+      .detach();
+
+  return CallbackReturn::SUCCESS;
+}
+
+// 停用回调
+CallbackReturn NodeDartApp::on_deactivate(const rclcpp_lifecycle::State &)
+{
+  RCLCPP_INFO(get_logger(), "正在停用...");
+
+  // 切换 UI 到停用提示
+  with_ui_lock(g_node, [&]()
+               {
+    lv_screen_load(guider_ui.scrLoader);
+    lv_label_set_text(guider_ui.scrLoader_labelLoadStage, "节点停用...");
+    lv_label_set_text(guider_ui.scrLoader_labelPrompt, "请等待");
+    lv_label_set_text(guider_ui.scrLoader_labelLoader, "0%");
+    lv_arc_set_value(guider_ui.scrLoader_arcLoader, 0); });
+
+  return CallbackReturn::SUCCESS;
+}
+
+// 清理回调
+CallbackReturn NodeDartApp::on_cleanup(const rclcpp_lifecycle::State &)
+{
+  RCLCPP_INFO(get_logger(), "正在清理...");
+
+  // 切换 UI 到清理提示
+  with_ui_lock(g_node, [&]()
+               {
+    lv_label_set_text(guider_ui.scrLoader_labelLoadStage, "清理资源...");
+    lv_label_set_text(guider_ui.scrLoader_labelLoader, "0%");
+    lv_label_set_text(guider_ui.scrLoader_labelPrompt, "请等待");
+    lv_arc_set_value(guider_ui.scrLoader_arcLoader, 0);
+    lv_screen_load(guider_ui.scrLoader); });
+
+  // 清除订阅者
+  dart_launcher_status_sub_.reset();
+  greenlight_image_sub_.reset();
+  green_light_sub_.reset();
+  qrcode_image_sub_.reset();
+
+  // 安全地清除定时器，避免在定时器回调中访问已释放的资源
+  for (auto &timer : timers_)
+  {
+    timer->cancel();
+  }
+  timers_.clear();
+
+  return CallbackReturn::SUCCESS;
+}
+
+// 关闭回调
+CallbackReturn NodeDartApp::on_shutdown(const rclcpp_lifecycle::State &state)
+{
+  RCLCPP_INFO(get_logger(), "正在关闭...");
+
+  // 切换 UI 到关闭提示
+  with_ui_lock(g_node, [&]()
+               {
+    lv_label_set_text(guider_ui.scrLoader_labelLoadStage, "节点清理...");
+    lv_label_set_text(guider_ui.scrLoader_labelLoader, "0%");
+    lv_label_set_text(guider_ui.scrLoader_labelPrompt, "请等待");
+    lv_arc_set_value(guider_ui.scrLoader_arcLoader, 0);
+    lv_screen_load(guider_ui.scrLoader); });
+
+  // 先设置终止标志，通知UI线程退出
+  ui_thread_running_ = false;
+
+  // 等待 UI 线程完成
+  if (ui_thread_ && ui_thread_->joinable())
+  {
+    RCLCPP_INFO(get_logger(), "等待UI线程结束...");
+    ui_thread_->join();
+    RCLCPP_INFO(get_logger(), "UI线程已结束");
+  }
+
+  return CallbackReturn::SUCCESS;
+}
+
+// 错误回调
+CallbackReturn NodeDartApp::on_error(const rclcpp_lifecycle::State &)
+{
+  RCLCPP_ERROR(get_logger(), "发生错误!");
+  return CallbackReturn::SUCCESS;
+}
+
+// UI线程回调
+void NodeDartApp::timer_callback_ui()
 {
   try
   {
-    while (rclcpp::ok())
+    /*Linux display device init*/
+
+    // 启动LVGL UI界面
+    lv_init();
+    lv_linux_disp_init();
+
+    setup_ui(&guider_ui);
+    custom_init(&guider_ui);
+    // 设置UI Loader到33%
+    lv_label_set_text(guider_ui.scrLoader_labelLoader, "0%");
+    lv_arc_set_value(guider_ui.scrLoader_arcLoader, 0);
+    lv_label_set_text(guider_ui.scrLoader_labelLoadStage, "等待配置...");
+
+    auto now = std::chrono::steady_clock::now();
+    while (rclcpp::ok() && ui_thread_running_)
     {
-      this->mutex_ui_.lock(); // Lock the mutex to prevent the GUI from being updated while the screen is being cleaned
-      lv_timer_handler();
-      this->mutex_ui_.unlock();
+      // 调用LVGL定时器处理程序，短锁
+      {
+        std::lock_guard<std::timed_mutex> lock(mutex_ui_);
+        lv_timer_handler();
+      }
+      // 每100ms执行一次主循环逻辑，分段加锁，捕获异常
+      if (std::chrono::steady_clock::now() - now > 100ms)
+      {
+        now = std::chrono::steady_clock::now();
+        try {
+          std::lock_guard<std::timed_mutex> lock(mutex_ui_);
+          screen_main_loop();
+        } catch (const std::exception &e) {
+          RCLCPP_ERROR(this->get_logger(), "screen_main_loop异常: %s", e.what());
+        }
+      }
+      // 短暂休眠，让出CPU时间给其他线程
       this_thread::sleep_for(5ms);
     }
-    this->mutex_ui_.lock();
-    lv_obj_clean(lv_scr_act()); // Clean up the active screen
-    lv_timer_handler();         // Call the timer handler
-    lv_deinit();                // Deinitialize LittlevGL
-    this->mutex_ui_.unlock();
+
+    // 在线程结束前做最终清理工作
+    {
+      lv_obj_clean(lv_scr_act()); // 清理活动屏幕
+      lv_timer_handler();         // 调用定时器处理程序
+      lv_deinit();                // 反初始化LVGL
+    }
   }
   catch (const std::exception &e)
   {
-    RCLCPP_ERROR(this->get_logger(), "UI thread exception: %s", e.what());
+    RCLCPP_ERROR(this->get_logger(), "UI线程异常: %s", e.what());
     if (!rclcpp::ok())
       return;
   }
-};
+}
 
-NodeLVGLUI::NodeLVGLUI() : Node("lvgl_ui")
+// 更新网络状态
+void NodeDartApp::update_network_status()
 {
-  // 参数
-  this->declare_parameter("yaw_angle_calibration_factor", rclcpp::ParameterType::PARAMETER_DOUBLE);
-  this->set_parameter(rclcpp::Parameter("yaw_angle_calibration_factor", 20.0));
-  this->declare_parameter("yaw_angle_calibration_filter_factor", rclcpp::ParameterType::PARAMETER_DOUBLE);
-  this->set_parameter(rclcpp::Parameter("yaw_angle_calibration_filter_factor", 0.95));
+  static std::mutex network_mutex;
+  std::lock_guard<std::mutex> lock(network_mutex);
 
-  // 加载飞镖
-  dart_db_ = std::make_shared<DartAlgorithm::DartDataBase>(string(YAML_PATH) + string("dart_db.yaml"));
-  // WatchFile thread
-  static thread watch_file_thread([this]()
-                                  {
-    this->last_write_time = fs::last_write_time(string(YAML_PATH) + string("dart_db.yaml"));
-    while(rclcpp::ok()){
-            auto current_write_time = fs::last_write_time(string(YAML_PATH) + string("dart_db.yaml"));
-
-            if (current_write_time != last_write_time)
-            {
-                last_write_time = current_write_time;
-                dart_db_->loadFromFile(string(YAML_PATH) + string("dart_db.yaml"));
-                this->mutex_ui_.lock();
-                this->update_dart_database();
-                this->mutex_ui_.unlock();
-                this->update_parameters_to_gui();
-                this->loadParametersfromGUI(false);
-                RCLCPP_INFO(this->get_logger(), "Dart db file changed and reloaded");
-            }
-                std::this_thread::sleep_for(1s);} });
-  lv_log_register_print_cb(print_cb);
-
-  lv_init();
-
-  /*Linux frame buffer device init*/
-  fbdev_init();
-
-  /*A small buffer for LittlevGL to draw the screen's content*/
-  static lv_color_t buf[2][DISP_BUF_SIZE];
-
-  /*Initialize a descriptor for the buffer*/
-  static lv_disp_draw_buf_t disp_buf;
-  lv_disp_draw_buf_init(&disp_buf, buf[0], buf[1], DISP_BUF_SIZE);
-
-  /*Initialize and register a display driver*/
-  static lv_disp_drv_t disp_drv;
-  lv_disp_drv_init(&disp_drv);
-  disp_drv.draw_buf = &disp_buf;
-  disp_drv.flush_cb = fbdev_flush;
-  disp_drv.hor_res = 1024;
-  disp_drv.ver_res = 600;
-  lv_disp_drv_register(&disp_drv);
-
-  evdev_init();
-
-  static lv_indev_drv_t indev_drv_1;
-  lv_indev_drv_init(&indev_drv_1); /*Basic initialization*/
-  indev_drv_1.type = LV_INDEV_TYPE_POINTER;
-
-  /*This function will be called periodically (by the library) to get the mouse position and state*/
-  indev_drv_1.read_cb = evdev_read;
-  lv_indev_drv_register(&indev_drv_1);
-
-  /*
-    GUI Guider
-   */
-  setup_ui(&guider_ui);
-  events_init(&guider_ui);
-  custom_init(&guider_ui);
-
-  DartConfig::declareParameters(*this);
-  // Subscribe /dart_launcher/dart_launcher_status /dart_launcher/dart_launcher_present_param
-  // Publish /dart_launcher/dart_launcher_cmd
-  dart_launcher_status_sub_ = this->create_subscription<dart_msgs::msg::DartLauncherStatus>(
-      "/dart_launcher/dart_launcher_status",
-      10, bind(&NodeLVGLUI::update_dart_launcher_status_callback, this, placeholders::_1));
-
-  dart_launcher_present_param_sub_ = this->create_subscription<dart_msgs::msg::DartParam>(
-      "/dart_launcher/dart_launcher_present_param",
-      rclcpp::QoS(rclcpp::KeepLast(10)).durability_volatile().reliable(), bind(&NodeLVGLUI::update_dart_launcher_present_param_callback, this, placeholders::_1));
-
-  dart_launcher_cmd_pub_ = this->create_publisher<dart_msgs::msg::DartParam>(
-      "/dart_launcher/dart_launcher_param_cmd",
-      rclcpp::QoS(rclcpp::KeepLast(10)).durability_volatile().reliable());
-
-  green_light_sub_ = this->create_subscription<dart_msgs::msg::GreenLight>(
-      "/dart_detector/locate",
-      rclcpp::QoS(rclcpp::KeepLast(10)).durability_volatile().reliable(),
-      bind(&NodeLVGLUI::update_green_light_callback, this, placeholders::_1));
-
-  cv_image_sub_ = this->create_subscription<sensor_msgs::msg::Image>(
-      "dart_detector/image", 1, bind(&NodeLVGLUI::update_cv_image, this, placeholders::_1));
-
-  judge_sub_ = this->create_subscription<dart_msgs::msg::Judge>(
-      "/dart_launcher/judge",
-      rclcpp::QoS(rclcpp::KeepLast(10)).durability_volatile().reliable(),
-      [this](dart_msgs::msg::Judge::SharedPtr msg) -> void
+  // 自动检测wlan0和eth0，优先wlan0
+  std::string ip = "N/A";
+  std::array<std::string, 2> interfaces = {"wlan0", "eth0"};
+  bool found_ip = false;
+  for (const auto &iface : interfaces)
+  {
+    std::string cmd = "ip addr show " + iface + " | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1";
+    FILE *fp = popen(cmd.c_str(), "r");
+    if (fp)
+    {
+      char buf[64] = {0};
+      if (fgets(buf, sizeof(buf), fp))
       {
-        judge_msg_ = *msg;
-      });
-
-  callback_set_parameter_handle = this->add_post_set_parameters_callback(std::bind(&NodeLVGLUI::callback_set_parameter, this, std::placeholders::_1));
-
-  update_ip_address();
-  update_parameters_to_gui();
-  update_dart_database();
-
-  auto timer_callback_ip_update =
-      [this]() -> void
-  {
-    update_ip_address();
-  };
-
-  auto timer_callback_lv_tick_inc =
-      [this]() -> void
-  {
-    lv_tick_inc(1);
-  };
-
-  auto timer_init_screen_switch =
-      [this]() -> void
-  {
-    lv_scr_load(guider_ui.Main);
-    timer_[2]->cancel();
-  };
-
-  timer_[0] = this->create_wall_timer(1000ms, timer_callback_ip_update);
-  // timer_[1] = this->create_wall_timer(1s, timer_callback_dart_msgsrmational_update);
-  timer_[1] = this->create_wall_timer(1ms, timer_callback_lv_tick_inc);
-  timer_[2] = this->create_wall_timer(2s, timer_init_screen_switch);
-
-  static thread timer_thread(bind(&NodeLVGLUI::timer_callback_ui, this));
-
-  RCLCPP_INFO(this->get_logger(), "UI thread started");
-}
-
-void NodeLVGLUI::calibration_fw(bool set_parameter)
-{
-  static lv_obj_t *ddlist_darts[4] = {guider_ui.Main_ddlist_launch_dart_1, guider_ui.Main_ddlist_launch_dart_2, guider_ui.Main_ddlist_launch_dart_3, guider_ui.Main_ddlist_launch_dart_4};
-  static lv_obj_t *spinboxs_fw_velocity_offset[4] = {
-      guider_ui.Main_spinbox_slot1_fw_offset,
-      guider_ui.Main_spinbox_slot2_fw_offset,
-      guider_ui.Main_spinbox_slot3_fw_offset,
-      guider_ui.Main_spinbox_slot4_fw_offset};
-
-  // 读取各个ddlist的选择值，解算飞镖击打目标距离/目标速度使用的摩擦轮速度值
-  double dis_X = lv_spinbox_get_value(guider_ui.Main_spinbox_distance_X) / 100.0;
-  double distance;
-
-  distance = DartAlgorithm::calculateDis(sqrt(pow(dis_X, 2) - pow(this->get_parameter("target_delta_height").as_double(), 2)), this->get_parameter("target_delta_height").as_double());
-  RCLCPP_INFO(this->get_logger(), "Calculated Distance: %f, with height: %f", sqrt(pow(dis_X, 2) - pow(this->get_parameter("target_delta_height").as_double(), 2)), this->get_parameter("target_delta_height").as_double());
-
-  // 计算摩擦轮速度
-  double fw_velocity[4], initial_velocity[4];
-
-  std::vector<int> fw_velocity_offset = {0, 0, 0, 0};
-  for (size_t i = 0; i < 4; i++)
-  {
-    char buf[20];
-    lv_dropdown_get_selected_str(ddlist_darts[i], buf, sizeof(buf));
-    if (strcmp(buf, "Default") == 0 || !dart_db_->contains(string(buf)))
-    {
-      fw_velocity[i] = this->get_parameter("target_fw_velocity").as_int();
-      target_yaw_launch_angle_offset[i] = 0;
-    }
-    else
-    {
-      initial_velocity[i] = dart_db_->calculateVelocity(string(buf), distance);
-      // lv_spinbox_set_value(guider_ui.Main_spinbox_initial_velocity, initial_velocity * 100.0);
-      RCLCPP_INFO(this->get_logger(), "Dart %s Calculated initial velocity: %f", buf, initial_velocity[i]);
-      fw_velocity[i] = dart_db_->calculateFWVelocity(string(buf), initial_velocity[i]);
-      RCLCPP_INFO(this->get_logger(), "Dart %s Calculated FW velocity: %f", buf, fw_velocity[i]);
-      target_yaw_launch_angle_offset[i] = dart_db_->getYawOffset(string(buf));
-      RCLCPP_INFO(this->get_logger(), "Dart %s Yaw offset: %d", buf, target_yaw_launch_angle_offset[i]);
-    }
-    if (i == 0)
-      lv_spinbox_set_value(guider_ui.Main_spinbox_fw_speed, fw_velocity[i]); // 会自动调用回调函数进行更新
-    if (i > 0)
-    {
-      fw_velocity_offset[i] = fw_velocity[i] - fw_velocity[0];
-      lv_spinbox_set_value(spinboxs_fw_velocity_offset[i], fw_velocity_offset[i]); // 会自动调用回调函数进行更新
-    }
-  }
-  if (set_parameter)
-  {
-    // 取消
-    callback_set_parameter_handle.reset();
-    this->set_parameter(rclcpp::Parameter("target_yaw_launch_angle_offset", target_yaw_launch_angle_offset));
-    // 重新注册
-    callback_set_parameter_handle = this->add_post_set_parameters_callback(std::bind(&NodeLVGLUI::callback_set_parameter, this, std::placeholders::_1));
-  }
-}
-
-void NodeLVGLUI::update_dart_database()
-{
-  static bool first_update = true;
-  static lv_obj_t *ddlist_darts[4] = {guider_ui.Main_ddlist_launch_dart_1, guider_ui.Main_ddlist_launch_dart_2, guider_ui.Main_ddlist_launch_dart_3, guider_ui.Main_ddlist_launch_dart_4};
-
-  // this->mutex_ui_.lock();
-  // 清空list_darts
-  if (Main_list_darts_items_.size() > 0)
-  {
-    for (auto &item : Main_list_darts_items_)
-    {
-      lv_obj_del(item);
-    }
-    Main_list_darts_items_.clear();
-  }
-
-  // 加载飞镖选择ddlist
-  auto names = dart_db_->getDartNames();
-
-  static lv_style_t style_Main_list_darts_extra_btns_main_default;
-  static bool style_Main_list_darts_extra_btns_main_default_init = false;
-  // Write style state: LV_STATE_PRESSED for &style_Main_list_darts_extra_btns_main_pressed
-  static lv_style_t style_Main_list_darts_extra_btns_main_pressed;
-  static lv_style_t style_Main_list_darts_extra_btns_main_focused;
-
-  if (!style_Main_list_darts_extra_btns_main_default_init)
-  {
-    ui_init_style(&style_Main_list_darts_extra_btns_main_default);
-
-    lv_style_set_pad_top(&style_Main_list_darts_extra_btns_main_default, 15);
-    lv_style_set_pad_left(&style_Main_list_darts_extra_btns_main_default, 15);
-    lv_style_set_pad_right(&style_Main_list_darts_extra_btns_main_default, 5);
-    lv_style_set_pad_bottom(&style_Main_list_darts_extra_btns_main_default, 15);
-    lv_style_set_border_width(&style_Main_list_darts_extra_btns_main_default, 0);
-    lv_style_set_text_color(&style_Main_list_darts_extra_btns_main_default, lv_color_hex(0x0D3055));
-    lv_style_set_text_font(&style_Main_list_darts_extra_btns_main_default, &lv_font_misans_28);
-    lv_style_set_text_opa(&style_Main_list_darts_extra_btns_main_default, 255);
-    lv_style_set_radius(&style_Main_list_darts_extra_btns_main_default, 0);
-    lv_style_set_bg_opa(&style_Main_list_darts_extra_btns_main_default, 0);
-
-    ui_init_style(&style_Main_list_darts_extra_btns_main_pressed);
-
-    lv_style_set_pad_top(&style_Main_list_darts_extra_btns_main_pressed, 15);
-    lv_style_set_pad_left(&style_Main_list_darts_extra_btns_main_pressed, 15);
-    lv_style_set_pad_right(&style_Main_list_darts_extra_btns_main_pressed, 15);
-    lv_style_set_pad_bottom(&style_Main_list_darts_extra_btns_main_pressed, 15);
-    lv_style_set_border_width(&style_Main_list_darts_extra_btns_main_pressed, 0);
-    lv_style_set_radius(&style_Main_list_darts_extra_btns_main_pressed, 20);
-    lv_style_set_text_color(&style_Main_list_darts_extra_btns_main_pressed, lv_color_hex(0x0D3055));
-    lv_style_set_text_font(&style_Main_list_darts_extra_btns_main_pressed, &lv_font_misans_28);
-    lv_style_set_text_opa(&style_Main_list_darts_extra_btns_main_pressed, 255);
-    lv_style_set_bg_opa(&style_Main_list_darts_extra_btns_main_pressed, 255);
-    lv_style_set_bg_color(&style_Main_list_darts_extra_btns_main_pressed, lv_color_hex(0xc1c1c1));
-    lv_style_set_bg_grad_dir(&style_Main_list_darts_extra_btns_main_pressed, LV_GRAD_DIR_NONE);
-
-    // Write style state: LV_STATE_FOCUSED for &style_Main_list_darts_extra_btns_main_focused
-    ui_init_style(&style_Main_list_darts_extra_btns_main_focused);
-
-    lv_style_set_pad_top(&style_Main_list_darts_extra_btns_main_focused, 15);
-    lv_style_set_pad_left(&style_Main_list_darts_extra_btns_main_focused, 15);
-    lv_style_set_pad_right(&style_Main_list_darts_extra_btns_main_focused, 15);
-    lv_style_set_pad_bottom(&style_Main_list_darts_extra_btns_main_focused, 15);
-    lv_style_set_border_width(&style_Main_list_darts_extra_btns_main_focused, 0);
-    lv_style_set_radius(&style_Main_list_darts_extra_btns_main_focused, 20);
-    lv_style_set_text_color(&style_Main_list_darts_extra_btns_main_focused, lv_color_hex(0xcadfff));
-    lv_style_set_text_font(&style_Main_list_darts_extra_btns_main_focused, &lv_font_misans_28);
-    lv_style_set_text_opa(&style_Main_list_darts_extra_btns_main_focused, 255);
-    lv_style_set_bg_opa(&style_Main_list_darts_extra_btns_main_focused, 255);
-    lv_style_set_bg_color(&style_Main_list_darts_extra_btns_main_focused, lv_color_hex(0x3b3b3b));
-    lv_style_set_bg_grad_dir(&style_Main_list_darts_extra_btns_main_focused, LV_GRAD_DIR_NONE);
-
-    style_Main_list_darts_extra_btns_main_default_init = true;
-  }
-
-  // names 之间加入\n
-  string names_str = "Default\n";
-  size_t i = 0;
-  for (auto &name : names)
-  {
-    names_str += name + "\n";
-    Main_list_darts_items_.push_back(
-        lv_list_add_btn(guider_ui.Main_list_darts, LV_SYMBOL_GPS, name.c_str()));
-    if (strcmp(name.c_str(), lv_textarea_get_text(guider_ui.Main_ta_dart_param_number)) == 0)
-    {
-      obj_dart_list_seleted = Main_list_darts_items_[i];
-      loadDartInfo(name);
-    }
-    lv_obj_add_event_cb(Main_list_darts_items_[i], dart_list_event_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_add_style(Main_list_darts_items_[i], &style_Main_list_darts_extra_btns_main_default, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_add_style(Main_list_darts_items_[i], &style_Main_list_darts_extra_btns_main_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
-    lv_obj_add_style(Main_list_darts_items_[i++], &style_Main_list_darts_extra_btns_main_focused, LV_PART_MAIN | LV_STATE_FOCUSED);
-  }
-
-  // 去掉最后一个多余的\n
-  names_str.pop_back();
-  static char buf_dropdown_options[1000];
-
-  strcpy(buf_dropdown_options, names_str.c_str());
-
-  uint16_t index = 0;
-  // 存储ddlist已经选择的对象，并判断是否在飞镖列表中，如果没有则重置为default
-  // vector<string> dart_selected = this->get_parameter("dart_selection").as_string_array();
-  for (auto &i : ddlist_darts)
-  {
-    lv_dropdown_set_options(i, buf_dropdown_options);
-    index++;
-  }
-
-  first_update = false;
-
-  // Update current screen layout.
-  lv_obj_update_layout(guider_ui.Main);
-
-  // this->mutex_ui_.unlock();
-}
-
-void NodeLVGLUI::loadParametersfromGUI(bool update_to_ros_param)
-{
-  static lv_obj_t *spinboxs_fw_velocity_offset[4] = {
-      guider_ui.Main_spinbox_slot1_fw_offset,
-      guider_ui.Main_spinbox_slot2_fw_offset,
-      guider_ui.Main_spinbox_slot3_fw_offset,
-      guider_ui.Main_spinbox_slot4_fw_offset};
-
-  // 取消回调函数
-  callback_set_parameter_handle.reset();
-  // generate a msg from GUI
-  dart_msgs::msg::DartParam msg;
-  msg.target_yaw_angle = lv_spinbox_get_value(guider_ui.Main_spinbox_yaw_angle);
-  msg.target_yaw_angle_offset = lv_spinbox_get_value(guider_ui.Main_spinbox_yaw_offset);
-  msg.target_fw_velocity = lv_spinbox_get_value(guider_ui.Main_spinbox_fw_speed);
-  msg.target_fw_velocity_offset = lv_spinbox_get_value(guider_ui.Main_spinbox_fw_speed_offset);
-  msg.target_fw_velocity_ratio = lv_spinbox_get_value(guider_ui.Main_spinbox_fw_speed_ratio) / 1000.0;
-  msg.auto_yaw_calibration = lv_obj_has_state(guider_ui.Main_sw_auto_yaw_calibration, LV_STATE_CHECKED);
-  msg.auto_fw_calibration = lv_obj_has_state(guider_ui.Main_sw_auto_rpm_calibration, LV_STATE_CHECKED);
-  msg.target_yaw_x_axis = lv_spinbox_get_value(guider_ui.Main_spinbox_yaw_calibration_x) / 100.0;
-  msg.target_fw_velocity_launch_offset = {lv_spinbox_get_value(spinboxs_fw_velocity_offset[0]),
-                                          lv_spinbox_get_value(spinboxs_fw_velocity_offset[1]),
-                                          lv_spinbox_get_value(spinboxs_fw_velocity_offset[2]),
-                                          lv_spinbox_get_value(spinboxs_fw_velocity_offset[3])};
-  msg.target_delta_height = lv_spinbox_get_value(guider_ui.Main_spinbox_target_delta_height) / 100.0;
-
-  // 已选择飞镖加载到参数内
-  array<string, 4> selected_darts;
-  lv_obj_t *ddlist_darts[4] = {guider_ui.Main_ddlist_launch_dart_1, guider_ui.Main_ddlist_launch_dart_2, guider_ui.Main_ddlist_launch_dart_3, guider_ui.Main_ddlist_launch_dart_4};
-  for (size_t i = 0; i < 4; i++)
-  {
-    char buf[20];
-    lv_dropdown_get_selected_str(ddlist_darts[i], buf, sizeof(buf));
-    selected_darts[i] = string(buf);
-    if (strcmp(buf, "Default") == 0 || !dart_db_->contains(string(buf)))
-    {
-      msg.target_yaw_launch_angle_offset[i] = 0;
-    }
-    else
-      msg.target_yaw_launch_angle_offset[i] = dart_db_->getYawOffset(string(buf));
-  }
-
-  // 距离和目标速度加载到参数内
-  msg.target_distance = lv_spinbox_get_value(guider_ui.Main_spinbox_distance_X) / 100.0;
-  msg.dart_selection = selected_darts;
-  msg.header.stamp = this->now();
-  msg.header.frame_id = "lvgl_ui";
-  dart_launcher_cmd_pub_->publish(msg);
-
-  if (update_to_ros_param)
-    loadParametersfromMsg(*this, std::make_shared<dart_msgs::msg::DartParam>(msg));
-  // 重新注册回调函数
-  callback_set_parameter_handle = this->add_post_set_parameters_callback(std::bind(&NodeLVGLUI::callback_set_parameter, this, std::placeholders::_1));
-}
-
-void NodeLVGLUI::calibration_yaw()
-{
-  // 检测参数内的Yaw轴x方向目标角度，如果有效检测到绿灯，则计算绿灯坐标与目标角度的差值，作为偏移量，进行折算后加到目标角度上
-  // 如果未检测到绿灯，则不动
-  if (green_light_ && dart_launcher_status_->dart_launcher_online && dart_launcher_status_->dart_state != 100 && dart_launcher_status_->dart_state != 101 && dart_launcher_status_->dart_state != 105 && judge_msg_.game_progress != 2 && judge_msg_.game_progress != 3) // 未处于boot/保护/比赛准备/自检/发射状态
-  {
-    int32_t target_yaw_angle = this->get_parameter("target_yaw_angle").as_int();
-    double target_yaw_x_axis = this->get_parameter("target_yaw_x_axis").as_double();
-    if (green_light_->is_detected == true)
-    {
-      double yaw_angle_calibration_factor = this->get_parameter("yaw_angle_calibration_factor").as_double();
-      // 计算偏移量
-      double delta_x = green_light_->location.x - target_yaw_x_axis;
-      // 限制delta_x在+-5000内
-      if (delta_x > MAX_YAW_CALIBRATION_DELTA_X)
-        delta_x = 5000;
-      else if (delta_x < -MAX_YAW_CALIBRATION_DELTA_X)
-        delta_x = -5000;
-      // 区间判断，若偏移量为正说明绿灯在右侧，应该向左转，调小target_yaw_angle
-      if (delta_x > 5)
-      {
-        target_yaw_angle -= delta_x * yaw_angle_calibration_factor;
+        ip = std::string(buf);
+        ip.erase(ip.find_last_not_of(" \n\r\t") + 1); // 去除末尾换行
+        found_ip = true;
       }
-      else if (delta_x < -5)
+      pclose(fp);
+    }
+    if (found_ip)
+      break;
+  }
+  this->ip_address_ = ip;
+
+  // 判断网络可达性 - 设置超时，避免ping卡住
+  std::string ping_cmd = "ping -c 1 -W 2 baidu.com > /dev/null 2>&1";
+  int result = system(ping_cmd.c_str());
+  this->is_online_ = (result == 0);
+}
+
+// 更新Greenlight图像
+void NodeDartApp::update_greenlight_image(sensor_msgs::msg::CompressedImage::SharedPtr msg)
+{
+  // 使用atomic判断当前屏幕，避免频繁加锁
+  static lv_obj_t *last_screen = nullptr;
+  lv_obj_t *current = lv_scr_act();
+
+  // 当且仅当当前屏幕是scrVision时，更新图像，避免不必要的数据拷贝
+  if (current == guider_ui.scrVision)
+  {
+    greenlight_image_ = *msg;
+  }
+
+  last_screen = current;
+}
+
+// 更新QRCode图像
+void NodeDartApp::update_qrcode_image(sensor_msgs::msg::CompressedImage::SharedPtr msg)
+{
+  // 使用atomic判断当前屏幕，避免频繁加锁
+  static lv_obj_t *last_screen = nullptr;
+  lv_obj_t *current = lv_scr_act();
+
+  // 当且仅当当前屏幕是scrVision时，更新图像，避免不必要的数据拷贝
+  if (current == guider_ui.scrVision)
+  {
+    qrcode_image_ = *msg;
+  }
+
+  last_screen = current;
+}
+
+// 检查飞镖发射并更新统计数据
+void NodeDartApp::check_dart_launch(dart_msgs::msg::DartLauncherStatus::SharedPtr msg)
+{
+  // 若与dart_launch_records_.back()的发射时间相同，则跳过处理
+  if (!dart_launch_records_.empty() &&
+      msg->last_launch_time == last_recorded_launch_time_)
+  {
+    return;
+  }
+
+  // 更新记录的发射时间
+  RCLCPP_INFO(get_logger(), "检测到新的飞镖发射，时间: %lu, 速度: %.2f, 发射序列号: %u",
+              msg->last_launch_time,
+              msg->last_launch_speed,
+              msg->dart_launch_process);
+
+  // 创建新的发射记录
+  DartLaunchRecord record;
+  record.time = msg->last_launch_time;
+  record.speed = msg->last_launch_speed;
+  record.sequence = ++total_launch_count_;
+
+  // 添加到发射记录队列
+  dart_launch_records_.push_back(record);
+
+  // 限制记录队列大小，保留最新的20条记录
+  while (dart_launch_records_.size() > 20)
+  {
+    dart_launch_records_.pop_front();
+  }
+
+  // 更新各个元件的使用次数
+  component_life_counts_["total"]++;   // 总发射次数
+  component_life_counts_["slider"]++;  // 滑台
+  component_life_counts_["trigger"]++; // 扳机
+  component_life_counts_["buffer"]++;  // 缓冲打印件
+  component_life_counts_["bottom"]++;  // 下滑块
+  component_life_counts_["rubber"]++;  // 皮筋
+
+  // 保存到文件
+  last_recorded_launch_time_ = msg->last_launch_time;
+  save_launch_statistics();
+}
+
+// 加载飞镖发射统计数据
+bool NodeDartApp::load_launch_statistics()
+{
+  try
+  {
+    // 如果文件不存在，返回false
+    if (!fs::exists(statistics_file_path_))
+    {
+      RCLCPP_INFO(get_logger(), "统计文件不存在: %s, 将创建新文件", statistics_file_path_.c_str());
+
+      // 初始化元件寿命计数器
+      component_life_counts_["total"] = 0;   // 总发射次数
+      component_life_counts_["slider"] = 0;  // 滑台
+      component_life_counts_["trigger"] = 0; // 扳机
+      component_life_counts_["buffer"] = 0;  // 缓冲打印件
+      component_life_counts_["bottom"] = 0;  // 下滑块
+      component_life_counts_["rubber"] = 0;  // 皮筋
+      return false;
+    }
+
+    // 打开并读取JSON文件
+    std::ifstream file(statistics_file_path_);
+    if (!file.is_open())
+    {
+      RCLCPP_ERROR(get_logger(), "无法打开统计文件: %s", statistics_file_path_.c_str());
+      return false;
+    }
+
+    // 解析JSON
+    nlohmann::json json_data;
+    file >> json_data;
+    file.close();
+
+    // 提取数据
+    if (json_data.contains("total_launch_count"))
+    {
+      total_launch_count_ = json_data["total_launch_count"];
+    }
+
+    if (json_data.contains("launches") && json_data["launches"].is_array())
+    {
+      dart_launch_records_.clear();
+      for (const auto &record : json_data["launches"])
       {
-        target_yaw_angle -= delta_x * yaw_angle_calibration_factor;
+        DartLaunchRecord dart_record;
+        dart_record.time = record["time"];
+        dart_record.speed = record["speed"];
+        dart_record.sequence = record["sequence"];
+        dart_launch_records_.push_back(dart_record);
       }
-
-      if (target_yaw_angle > YAW_MAX_ANGLE)
-        target_yaw_angle = YAW_MAX_ANGLE;
-      else if (target_yaw_angle < 5000)
-        target_yaw_angle = 5000;
-
-      RCLCPP_INFO(this->get_logger(), "Calibrating yaw angle to %d", target_yaw_angle);
-      lv_spinbox_set_value(guider_ui.Main_spinbox_yaw_angle, target_yaw_angle); // 会自动调用回调函数进行更新
     }
-  }
-  else
-  {
-    RCLCPP_DEBUG(this->get_logger(), "Dart launcher is offline or in boot/protect state, or camera is down, skip calibration");
-  }
-}
 
-void NodeLVGLUI::callback_set_parameter(const vector<rclcpp::Parameter> &parameters)
-{
-  RCLCPP_INFO(this->get_logger(), "Parameters set request received");
-  update_parameters_to_gui();
-}
-
-void NodeLVGLUI::update_green_light_callback(dart_msgs::msg::GreenLight::SharedPtr msg)
-{
-  if (msg == nullptr)
-    return;
-
-  double last_location_x;
-  if (green_light_)
-    last_location_x = green_light_->location.x;
-  else
-    last_location_x = msg->location.x;
-  // 低通滤波
-  msg->location.x = msg->location.x * this->get_parameter("yaw_angle_calibration_filter_factor").as_double() + last_location_x * (1 - this->get_parameter("yaw_angle_calibration_filter_factor").as_double());
-  if (!msg->is_detected)
-    msg->location.x = last_location_x;
-  green_light_ = msg;
-
-  with_ui_lock(node, [&]()
-               {
-                 if (msg->is_detected)
-                 {
-                   static char buf[30];
-                   sprintf(buf, "%.1f, %.1f", msg->location.x, msg->location.y);
-                   RCLCPP_DEBUG(this->get_logger(), "Green light detected at %.1f, %.1f", msg->location.x, msg->location.y);
-                   lv_label_set_text(guider_ui.Main_label_yaw_location, buf);
-                   lv_label_set_text(guider_ui.Main_label_yaw_location_cv, buf);
-                 }
-                 else
-                 {
-                   lv_label_set_text(guider_ui.Main_label_yaw_location, "N/A");
-                   lv_label_set_text(guider_ui.Main_label_yaw_location_cv, "N/A");
-                 }
-
-                 if (this->get_parameter("auto_yaw_calibration").as_bool())
-                   calibration_yaw(); // 10Hz
-               });
-}
-
-void NodeLVGLUI::update_dart_launcher_status_callback(dart_msgs::msg::DartLauncherStatus::SharedPtr msg)
-{
-  // 离线警告 如果bool任意一个为零则将msgbox取消hidden，内容为"弹鼓/Yaw轴/丝杆/摩擦轮电机/遥控器/C板/裁判离线"，如多个则用 连接并叠加
-  /*
-  bool motor_ls_online 0
-  bool motor_y_online 0
-  bool motor_dm_online 0
-  bool judge_online 0
-  bool[4] motor_fw_online [0,0,0,0]
-  bool rc_online 0
-  bool dart_launcher_online 0
-  */
-  if (msg == nullptr)
-    return;
-
-  dart_launcher_status_ = msg;
-
-  if (!mutex_ui_.try_lock())
-    return;
-
-  string msgbox_text = "";
-  if (!msg->motor_ls_online)
-    msgbox_text += "丝杆 ";
-  if (!msg->motor_y_online)
-    msgbox_text += "Yaw轴 ";
-  if (!msg->motor_dm_online)
-    msgbox_text += "弹鼓 ";
-  if (!msg->judge_online)
-    msgbox_text += "裁判 ";
-  if (!msg->rc_online)
-    msgbox_text += "遥控器 ";
-
-  if (!msg->motor_fw_online[0])
-    msgbox_text += "摩擦轮1 ";
-  if (!msg->motor_fw_online[1])
-    msgbox_text += "摩擦轮2 ";
-  if (!msg->motor_fw_online[2])
-    msgbox_text += "摩擦轮3 ";
-  if (!msg->motor_fw_online[3])
-    msgbox_text += "摩擦轮4 ";
-  if (!msg->dart_launcher_online)
-    msgbox_text = "C板 ";
-
-  if (msgbox_text != "")
-  {
-    msgbox_text += "离线  ";
-    lv_obj_clear_flag(guider_ui.Main_msgbox, LV_OBJ_FLAG_HIDDEN);
-    if (msgbox_text != lv_label_get_text(lv_msgbox_get_text(guider_ui.Main_msgbox)))
+    // 加载元件寿命数据
+    if (json_data.contains("component_life"))
     {
-      lv_label_set_text(lv_msgbox_get_title(guider_ui.Main_msgbox), "警告");
-      lv_label_set_text(lv_msgbox_get_text(guider_ui.Main_msgbox), msgbox_text.c_str());
-    }
-  }
-  else
-  {
-    lv_obj_add_flag(guider_ui.Main_msgbox, LV_OBJ_FLAG_HIDDEN);
-  }
+      const auto &life_data = json_data["component_life"];
 
-  // uint8 dart_state # boot = 100, protect = 101, remote = 102, match = 103-106 Enter Wait Launch Reload, undefined=255
-
-  if (!msg->dart_launcher_online)
-    lv_label_set_text(guider_ui.Main_label_state, "Unknown");
-  else if (msg->dart_state >= 103 && msg->dart_state <= 106)
-  {
-    lv_label_set_text(guider_ui.Main_label_state, "Match");
-    switch (msg->dart_state)
-    {
-    case 103:
-      lv_label_set_text(guider_ui.Main_label_23, "复位中");
-      break;
-    case 104:
-      lv_label_set_text(guider_ui.Main_label_23, "等待中");
-      break;
-    case 105:
-      lv_label_set_text(guider_ui.Main_label_23, "正在推出");
-      break;
-    case 106:
-      lv_label_set_text(guider_ui.Main_label_23, "装填中");
-      break;
-    }
-    lv_label_set_text_fmt(guider_ui.Main_label_launch_progress, "%d/4", msg->dart_launch_process);
-    lv_bar_set_value(guider_ui.Main_bar_launch_progress, msg->dart_launch_process * 25, LV_ANIM_OFF);
-  }
-  else
-  {
-    if (msg->motor_dm_resetting || msg->motor_ls_resetting || msg->motor_y_resetting)
-    {
-      lv_label_set_text(guider_ui.Main_label_23, "复位中");
+      // 初始化默认值
+      component_life_counts_["total"] = life_data.value("total", 0);     // 总发射次数
+      component_life_counts_["slider"] = life_data.value("slider", 0);   // 滑台
+      component_life_counts_["trigger"] = life_data.value("trigger", 0); // 扳机
+      component_life_counts_["buffer"] = life_data.value("buffer", 0);   // 缓冲打印件
+      component_life_counts_["bottom"] = life_data.value("bottom", 0);   // 下滑块
+      component_life_counts_["rubber"] = life_data.value("rubber", 0);   // 皮筋
     }
     else
     {
-      lv_label_set_text(guider_ui.Main_label_23, "不适用");
+      // 如果没有元件寿命数据，则初始化为0
+      component_life_counts_["total"] = 0;   // 总发射次数
+      component_life_counts_["slider"] = 0;  // 滑台
+      component_life_counts_["trigger"] = 0; // 扳机
+      component_life_counts_["buffer"] = 0;  // 缓冲打印件
+      component_life_counts_["bottom"] = 0;  // 下滑块
+      component_life_counts_["rubber"] = 0;  // 皮筋
     }
 
-    if (msg->dart_state == 100)
-      lv_label_set_text(guider_ui.Main_label_state, "Boot");
-    else if (msg->dart_state == 101)
-      lv_label_set_text(guider_ui.Main_label_state, "Protect");
-    else if (msg->dart_state == 102)
-      lv_label_set_text(guider_ui.Main_label_state, "Remote");
-    else
-      lv_label_set_text(guider_ui.Main_label_state, "Unknown");
+    // 设置上次记录时间为最近一条记录的时间
+    if (!dart_launch_records_.empty())
+    {
+      last_recorded_launch_time_ = dart_launch_records_.back().time;
+    }
 
-    lv_label_set_text(guider_ui.Main_label_launch_progress, "0/4");
-    lv_bar_set_value(guider_ui.Main_bar_launch_progress, 0, LV_ANIM_OFF);
+    RCLCPP_INFO(get_logger(), "已加载统计数据: 总计 %u 次发射, %zu 条记录",
+                total_launch_count_, dart_launch_records_.size());
+    return true;
   }
-
-  // float32 voltage[4] 取平均
-  double voltage = 0;
-  int online_count[2];
-  online_count[0] = msg->motor_fw_online[0] + msg->motor_fw_online[1];
-  online_count[1] = msg->motor_fw_online[2] + msg->motor_fw_online[3];
-  if (online_count[0] + online_count[1] > 0)
+  catch (const std::exception &e)
   {
-    for (int i = 0; i < 4; i++)
-      voltage += msg->bus_voltage[i];
-    voltage /= online_count[0] + online_count[1];
+    RCLCPP_ERROR(get_logger(), "加载统计数据时出错: %s", e.what());
+    return false;
   }
-  char voltage_str[10];
-  sprintf(voltage_str, "%.1fV", voltage);
-  if (voltage == 0)
-    lv_label_set_text(guider_ui.Main_label_voltage, "N/A");
+}
+
+// 保存飞镖发射统计数据
+bool NodeDartApp::save_launch_statistics()
+{
+  try
+  {
+    // 创建JSON数据
+    nlohmann::json json_data;
+    json_data["total_launch_count"] = total_launch_count_;
+
+    // 添加发射记录
+    nlohmann::json launches_array = nlohmann::json::array();
+    for (const auto &record : dart_launch_records_)
+    {
+      nlohmann::json record_json;
+      record_json["time"] = record.time;
+      record_json["speed"] = record.speed;
+      record_json["sequence"] = record.sequence;
+      launches_array.push_back(record_json);
+    }
+    json_data["launches"] = launches_array;
+
+    // 添加元件寿命数据
+    nlohmann::json component_life;
+    for (const auto &[key, value] : component_life_counts_)
+    {
+      component_life[key] = value;
+    }
+    json_data["component_life"] = component_life;
+
+    // 写入文件
+    std::ofstream file(statistics_file_path_);
+    if (!file.is_open())
+    {
+      RCLCPP_ERROR(get_logger(), "无法打开统计文件进行写入: %s", statistics_file_path_.c_str());
+      return false;
+    }
+
+    file << json_data.dump(2); // 使用2个空格缩进使JSON更易读
+    file.close();
+
+    RCLCPP_INFO(get_logger(), "统计数据已保存至: %s", statistics_file_path_.c_str());
+    return true;
+  }
+  catch (const std::exception &e)
+  {
+    RCLCPP_ERROR(get_logger(), "保存统计数据时出错: %s", e.what());
+    return false;
+  }
+}
+
+// 重置元件寿命计数器
+bool NodeDartApp::reset_component_life_count(const std::string &component_name)
+{
+  // 检查是否是有效的元件名称
+  if (component_life_counts_.find(component_name) != component_life_counts_.end())
+  {
+    RCLCPP_INFO(get_logger(), "重置元件 %s 的寿命计数器", component_name.c_str());
+
+    // 重置计数器
+    component_life_counts_[component_name] = 0;
+
+    // 保存到文件
+    return save_launch_statistics();
+  }
   else
-    lv_label_set_text(guider_ui.Main_label_voltage, voltage_str);
-
-  // 摩擦轮速度
-  int32_t motor_fw_velocity_average[] = {0, 0};
-  if (online_count[0] != 0)
-    motor_fw_velocity_average[0] = (msg->motor_fw_velocity[0] + msg->motor_fw_velocity[1]) / online_count[0];
-  if (online_count[1] != 0)
-    motor_fw_velocity_average[1] = (msg->motor_fw_velocity[2] + msg->motor_fw_velocity[3]) / online_count[1];
-  lv_label_set_text_fmt(guider_ui.Main_label_fw_speed_1, "%d", motor_fw_velocity_average[0]);
-  lv_label_set_text_fmt(guider_ui.Main_label_fw_speed_2, "%d", motor_fw_velocity_average[1]);
-  lv_meter_set_indicator_value(guider_ui.Main_meter_fw_speed_1, guider_ui.Main_meter_fw_speed_1_scale_0_ndline_0, motor_fw_velocity_average[0]);
-  lv_meter_set_indicator_value(guider_ui.Main_meter_fw_speed_2, guider_ui.Main_meter_fw_speed_2_scale_0_ndline_0, motor_fw_velocity_average[1]);
-
-  // Yaw轴角度
-  lv_label_set_text_fmt(guider_ui.Main_label_yaw_angle, "%d", msg->motor_y_angle);
-  lv_bar_set_value(guider_ui.Main_bar_yaw_angle, (msg->motor_y_angle / YAW_MAX_ANGLE) * 100, LV_ANIM_OFF);
-  mutex_ui_.unlock();
+  {
+    RCLCPP_ERROR(get_logger(), "未知的元件名称: %s", component_name.c_str());
+    return false;
+  }
 }
 
-void NodeLVGLUI::update_cv_image(sensor_msgs::msg::Image::SharedPtr msg)
+// UI调用的桥接函数，用于重置元件寿命
+extern "C" bool reset_component_life_count_from_ui(const char *component_name)
 {
-  static lv_color_t img_buf_[2][LV_CANVAS_BUF_SIZE_TRUE_COLOR(606, 485)];
-  static int buf_index = 0;
-  // 如果当前画面不在"视觉"，则不更新
-  if (lv_tabview_get_tab_act(guider_ui.Main_MainView) != 2)
+  if (g_node)
+  {
+    return g_node->reset_component_life_count(component_name);
+  }
+  return false;
+}
+
+// 联网
+extern "C" void connect_to_wifi(const char *ssid)
+{
+  static bool operating = false;
+
+  // 检查合法性
+  if (!ssid || std::string(ssid).empty())
+  {
+    RCLCPP_ERROR(g_node->get_logger(), "SSID不能为空");
     return;
-  buf_index %= 2;
-  // img_buf = img_buf_;
-  if (msg == nullptr)
+  }
+
+  if (operating)
     return;
-  // 图像是bgr8
-  // 用cv_bridge压缩到606*485
-  cv::Mat img_resized =
-      cv_bridge::toCvShare(msg, sensor_msgs::image_encodings::BGR8)->image;
+  operating = true;
 
-  // 压缩
-  cv::resize(img_resized, img_resized, cv::Size(606, 485), 0, 0, cv::INTER_LINEAR);
+  RCLCPP_INFO(g_node->get_logger(), "正在尝试连接WiFi: %s", ssid);
 
-  // 转换为16位加载到lvgl buf
-  for (int row = 0; row < 485; ++row)
-  {
-    for (int col = 0; col < 606; ++col)
-    {
-      auto px = img_resized.at<cv::Vec3b>(row, col);
-      img_buf_[buf_index][row * 606 + col] = LV_COLOR_MAKE(px[2], px[1], px[0]);
+  std::string ssid_str = ssid;
+  std::thread([ssid_str]()
+              {
+    std::string cmd = "nmcli con up \"" + ssid_str + "\"";
+    int ret = system(cmd.c_str());
+    if (ret == 0) {
+      RCLCPP_INFO(g_node->get_logger(), "已尝试连接WiFi: %s", ssid_str.c_str());
+    } else {
+      RCLCPP_ERROR(g_node->get_logger(), "连接WiFi失败: %s", ssid_str.c_str());
     }
-  }
-  mutex_ui_.lock();
-  // lv_canvas_copy_buf(guider_ui.Main_canvas_opencv, img_buf_, 0, 0, 606, 485); // 双缓冲绘制
-  lv_canvas_set_buffer(guider_ui.Main_canvas_opencv, img_buf_[buf_index], 606, 485, LV_IMG_CF_TRUE_COLOR);
-  lv_obj_invalidate(guider_ui.Main_canvas_opencv);
-  mutex_ui_.unlock();
-  buf_index++;
+    operating = false; })
+      .detach();
 }
 
-void NodeLVGLUI::update_parameters_to_gui()
+// 主函数
+int main(int argc, char **argv)
 {
-  mutex_ui_.lock();
-  // 禁用回调
-  // 取消回调函数
-  // callback_set_parameter_handle.reset();
-  callback_spinbox_disabled = true; // 禁止GUI回调操作
-  lv_spinbox_set_value(guider_ui.Main_spinbox_yaw_angle, this->get_parameter("target_yaw_angle").as_int());
-  lv_spinbox_set_value(guider_ui.Main_spinbox_yaw_offset, this->get_parameter("target_yaw_angle_offset").as_int());
-  lv_spinbox_set_value(guider_ui.Main_spinbox_yaw_angle_cv, this->get_parameter("target_yaw_angle").as_int());
-  lv_spinbox_set_value(guider_ui.Main_spinbox_yaw_angle_offset_cv, this->get_parameter("target_yaw_angle_offset").as_int());
-  lv_spinbox_set_value(guider_ui.Main_spinbox_fw_speed, this->get_parameter("target_fw_velocity").as_int());
-  lv_spinbox_set_value(guider_ui.Main_spinbox_fw_speed_offset, this->get_parameter("target_fw_velocity_offset").as_int());
-  lv_spinbox_set_value(guider_ui.Main_spinbox_fw_speed_ratio, this->get_parameter("target_fw_velocity_ratio").as_double() * 1000);
-  lv_spinbox_set_value(guider_ui.Main_spinbox_yaw_calibration_x, this->get_parameter("target_yaw_x_axis").as_double() * 100);
-  // Switch value
-  set_switch_state(guider_ui.Main_sw_auto_rpm_calibration, this->get_parameter("auto_fw_calibration").as_bool());
-  set_switch_state(guider_ui.Main_sw_auto_yaw_calibration, this->get_parameter("auto_yaw_calibration").as_bool());
-  set_switch_state(guider_ui.Main_sw_auto_yaw_calibration_cv, this->get_parameter("auto_yaw_calibration").as_bool());
+  // 初始化ROS
+  rclcpp::init(argc, argv);
 
-  // Distance & Delta Height
-  lv_spinbox_set_value(guider_ui.Main_spinbox_distance_X, this->get_parameter("target_distance").as_double() * 100);
-  lv_spinbox_set_value(guider_ui.Main_spinbox_target_delta_height, this->get_parameter("target_delta_height").as_double() * 100);
+  auto options = rclcpp::NodeOptions();
+  options.automatically_declare_parameters_from_overrides(true);
+  // 创建生命周期节点
+  g_node = std::make_shared<NodeDartApp>(options);
+  RCLCPP_INFO(g_node->get_logger(), "Node started. Spinning...");
+  rclcpp::spin(g_node->get_node_base_interface());
 
-  // 飞镖选择
-  auto names = dart_db_->getDartNames();
-  lv_obj_t *ddlist_darts[4] = {guider_ui.Main_ddlist_launch_dart_1, guider_ui.Main_ddlist_launch_dart_2, guider_ui.Main_ddlist_launch_dart_3, guider_ui.Main_ddlist_launch_dart_4};
-  // 存储ddlist已经选择的对象，并判断是否在飞镖列表中，如果没有则重置为default
-  vector<string> dart_selected = this->get_parameter("dart_selection").as_string_array();
-  for (size_t i = 0; i < 4; i++)
-  {
-    if (!(dart_db_->contains(dart_selected[i])))
-    {
-      lv_dropdown_set_selected(ddlist_darts[i], 0);
-      RCLCPP_WARN(this->get_logger(), "Dart %s not found in database, reset to default", dart_selected[i].c_str());
-    }
-    else
-    { // 1 for default
-      lv_dropdown_set_selected(ddlist_darts[i], find(names.begin(), names.end(), dart_selected[i]) - names.begin() + 1);
-    }
-  }
-
-  // 加载offset
-  // 已选择飞镖加载到参数内
-  array<string, 4> selected_darts;
-  for (size_t i = 0; i < 4; i++)
-  {
-    char buf[20];
-    lv_dropdown_get_selected_str(ddlist_darts[i], buf, sizeof(buf));
-    selected_darts[i] = string(buf);
-    if (strcmp(buf, "Default") == 0 || !dart_db_->contains(string(buf)))
-    {
-      target_yaw_launch_angle_offset[i] = 0;
-    }
-    else
-      target_yaw_launch_angle_offset[i] = dart_db_->getYawOffset(string(buf));
-  }
-
-  // 加载摩擦轮速度offset
-  static lv_obj_t *spinboxs_fw_velocity_offset[4] = {
-      guider_ui.Main_spinbox_slot1_fw_offset,
-      guider_ui.Main_spinbox_slot2_fw_offset,
-      guider_ui.Main_spinbox_slot3_fw_offset,
-      guider_ui.Main_spinbox_slot4_fw_offset};
-
-  for (size_t i = 0; i < 4; i++)
-  {
-    lv_spinbox_set_value(spinboxs_fw_velocity_offset[i], this->get_parameter("target_fw_velocity_launch_offset").as_integer_array()[i]);
-  }
-
-  if (this->get_parameter("auto_fw_calibration").as_bool())
-    calibration_fw(false); // 不允许自动设置参数，使用老参数，否则会引发参数设置的死循环。也就是说，上电时的参数都是未经计算的，除非勾选自动计算。
-
-  // 如果Yaw轴offset与参数内的值不一致，则开启线程去更新他
-  if (target_yaw_launch_angle_offset[0] != this->get_parameter("target_yaw_launch_angle_offset").as_integer_array()[0] ||
-      target_yaw_launch_angle_offset[1] != this->get_parameter("target_yaw_launch_angle_offset").as_integer_array()[1] ||
-      target_yaw_launch_angle_offset[2] != this->get_parameter("target_yaw_launch_angle_offset").as_integer_array()[2] ||
-      target_yaw_launch_angle_offset[3] != this->get_parameter("target_yaw_launch_angle_offset").as_integer_array()[3])
-  {
-    RCLCPP_INFO(this->get_logger(), "Yaw offset dismatch, updating...");
-
-    RCLCPP_INFO(this->get_logger(), "Yaw offset parameter update: from %d %d %d %d to %d %d %d %d",
-                this->get_parameter("target_yaw_launch_angle_offset").as_integer_array()[0],
-                this->get_parameter("target_yaw_launch_angle_offset").as_integer_array()[1],
-                this->get_parameter("target_yaw_launch_angle_offset").as_integer_array()[2],
-                this->get_parameter("target_yaw_launch_angle_offset").as_integer_array()[3],
-                target_yaw_launch_angle_offset[0],
-                target_yaw_launch_angle_offset[1],
-                target_yaw_launch_angle_offset[2],
-                target_yaw_launch_angle_offset[3]);
-
-    thread t([this]()
-             { this->set_parameter(rclcpp::Parameter("target_yaw_launch_angle_offset", target_yaw_launch_angle_offset)); }); // 将计算值设置为参数，但是不会主动更新，需要其他操作触发
-    t.detach();
-
-    // 将槽位yaw偏移角度写入label52 53 54 55
-    lv_label_set_text_fmt(guider_ui.Main_label_52, "槽位1偏移速度(y: %d)", target_yaw_launch_angle_offset[0]);
-    lv_label_set_text_fmt(guider_ui.Main_label_53, "槽位2偏移速度(y: %d)", target_yaw_launch_angle_offset[1]);
-    lv_label_set_text_fmt(guider_ui.Main_label_54, "槽位3偏移速度(y: %d)", target_yaw_launch_angle_offset[2]);
-    lv_label_set_text_fmt(guider_ui.Main_label_55, "槽位4偏移速度(y: %d)", target_yaw_launch_angle_offset[3]);
-  }
-  // // 重新注册回调函数
-  // callback_set_parameter_handle = this->add_post_set_parameters_callback(std::bind(&NodeLVGLUI::callback_set_parameter, this, std::placeholders::_1));
-  callback_spinbox_disabled = false;
-
-  mutex_ui_.unlock();
-}
-
-void NodeLVGLUI::update_dart_launcher_present_param_callback(dart_msgs::msg::DartParam::SharedPtr msg)
-{
-  RCLCPP_INFO(this->get_logger(), "Received dart_launcher_present_param");
-
-  // 取消回调函数
-  callback_set_parameter_handle.reset();
-  loadParametersfromMsg(*this, msg);
-  update_parameters_to_gui();
-  // 重新注册回调函数
-  callback_set_parameter_handle = this->add_post_set_parameters_callback(std::bind(&NodeLVGLUI::callback_set_parameter, this, std::placeholders::_1));
-}
-
-void NodeLVGLUI::update_ip_address()
-{
-  // 获取IP地址
-  string interface = "wlan0";
-  string ip = getIPAddress(interface);
-
-  if (!mutex_ui_.try_lock())
-    return;
-  RCLCPP_INFO_ONCE(this->get_logger(), "IP address: %s", ip.c_str());
-  lv_label_set_text(guider_ui.Main_label_ip, ip.c_str());
-  mutex_ui_.unlock();
-}
-
-int main(void)
-{
-  // ROS 2 Interface begin
-  rclcpp::init(0, nullptr);
-  node = make_shared<NodeLVGLUI>();
-  rclcpp::spin(node);
-  RCLCPP_INFO(node->get_logger(), "UI thread stopped");
-
+  // 清理资源
   rclcpp::shutdown();
-  return true;
+
+  return 0;
 }

@@ -3,6 +3,8 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <csignal>
+#include <atomic>
 
 #include "rclcpp/rclcpp.hpp"
 #include "lifecycle_msgs/srv/change_state.hpp"
@@ -12,6 +14,17 @@
 
 // Empty service callback
 #include "std_srvs/srv/trigger.hpp"
+
+// 全局变量，用于信号处理
+std::atomic<bool> g_signal_received{false};
+std::shared_ptr<rclcpp::Node> g_lifecycle_manager_node;
+
+// 信号处理函数
+void signal_handler(int signum)
+{
+    g_signal_received.store(true);
+    RCLCPP_INFO(g_lifecycle_manager_node->get_logger(), "Received signal %d, initiating shutdown...", signum);
+}
 
 using namespace std::chrono_literals;
 using ChangeState = lifecycle_msgs::srv::ChangeState;
@@ -37,11 +50,20 @@ class LifecycleManager : public rclcpp::Node
 {
 public:
     LifecycleManager()
-        : Node("lifecycle_manager")
+        : Node("lifecycle_manager", rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true))
     {
+        // 注册信号处理函数
+        std::signal(SIGUSR1, signal_handler); // 用户自定义信号1
+
+        RCLCPP_INFO(get_logger(), "Signal handlers registered for SIGTERM, SIGINT, and SIGUSR1");
+
         // Load nodes from ROS parameters
-        this->declare_parameter<std::vector<std::string>>("nodes", {"node_dart_param_gateway",
-                                                                    "node_dart_launcher_detector"});
+        if (!this->has_parameter("nodes"))
+        {
+            this->declare_parameter<std::vector<std::string>>("nodes", {"node_dart_param_gateway",
+                                                                        "node_dart_launcher_detector"});
+        }
+        
         nodes_ = this->get_parameter("nodes").as_string_array();
 
         for (const auto &node_name : nodes_)
@@ -60,7 +82,7 @@ public:
 
         // Periodic monitoring of node state
         monitor_timer_ = create_wall_timer(
-            3s, std::bind(&LifecycleManager::monitor_nodes, this));
+            1s, std::bind(&LifecycleManager::monitor_nodes, this));
 
         // Shutdown service
         shutdown_srv_ = this->create_service<Trigger>(
@@ -193,24 +215,40 @@ private:
                     {
             std::this_thread::sleep_for(5s);
             RCLCPP_INFO(get_logger(), "Restarting dart_ros2_run.service");
-            system("sudo systemctl restart dart_ros2_run.service"); 
+            system("sudo systemctl restart dart_ros2_run.service");
             exit(0); })
             .detach();
     }
 
     void monitor_nodes()
     {
+        // 检查是否收到信号
+        if (g_signal_received.load())
+        {
+            RCLCPP_INFO(get_logger(), "Signal received, initiating shutdown sequence...");
+            // Play shutdown sound
+            buzzer_sound_effect(BuzzerSound::BuzzerWin10Remove);
+
+            shutdown_all();
+            RCLCPP_INFO(get_logger(), "All nodes shutdown transitions triggered.");
+
+            // Shutdown the node
+            RCLCPP_INFO(get_logger(), "Shutting down lifecycle manager...");
+            monitor_timer_->cancel();
+            return;
+        }
+
         for (auto &p : nodes_)
         {
             auto &node_name = p;
             auto &count = offline_count_[node_name];
             auto get_state_client = sub_node->create_client<GetState>(node_name + "/get_state");
 
-            if (!get_state_client->wait_for_service(3s))
+            if (!get_state_client->wait_for_service(1s))
             {
                 count++;
                 RCLCPP_WARN(get_logger(), "%s get_state unavailable. Offline count: %d", node_name.c_str(), count);
-                if (count > 3)
+                if (count > 1)
                 {
                     RCLCPP_ERROR(get_logger(), "%s is offline. Triggering restart error handler", node_name.c_str());
                     error_handler();
@@ -221,11 +259,9 @@ private:
 
             auto req = std::make_shared<GetState::Request>();
             auto future = get_state_client->async_send_request(req);
-            auto status = rclcpp::spin_until_future_complete(sub_node, future, 3s);
+            auto status = rclcpp::spin_until_future_complete(sub_node, future, 1s);
             if (status == rclcpp::FutureReturnCode::SUCCESS)
             {
-                // 服务可用，重置该节点计数
-                count = 0;
                 auto response = future.get();
                 node_states_[node_name] = response->current_state.id;
                 if (response->current_state.id != lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE)
@@ -233,12 +269,14 @@ private:
                     RCLCPP_ERROR(get_logger(), "%s is not active, current state: %d", node_name.c_str(), response->current_state.id);
                     error_handler();
                 }
+                // 服务可用，重置该节点计数
+                count = 0;
             }
             else
             {
                 RCLCPP_ERROR(get_logger(), "Failed to get state from %s", node_name.c_str());
                 count++;
-                if (count > 3)
+                if (count > 1)
                 {
                     RCLCPP_ERROR(get_logger(), "%s is offline. Triggering restart error handler", node_name.c_str());
                     error_handler();
@@ -282,6 +320,7 @@ int main(int argc, char **argv)
 {
     rclcpp::init(argc, argv);
     auto manager = std::make_shared<LifecycleManager>();
+    g_lifecycle_manager_node = manager; // Assign after manager is created
     sub_node = std::make_shared<SubNode>();
     rclcpp::spin(manager);
     rclcpp::shutdown();

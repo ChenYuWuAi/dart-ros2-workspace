@@ -37,4 +37,9 @@ target_include_directories(system_identification_node PUBLIC include ..)
 ament_target_dependencies(system_identification_node rclcpp dart_msgs)
 install(TARGETS system_identification_node DESTINATION lib/${PROJECT_NAME})
 
+# Judge test app
+add_executable(judge_test_case src/judge_test_case.cpp)
+target_include_directories(judge_test_case PUBLIC include)
+install(TARGETS judge_test_case DESTINATION lib/${PROJECT_NAME})
+
 ament_package()
