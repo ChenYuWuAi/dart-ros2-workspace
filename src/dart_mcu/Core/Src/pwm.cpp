@@ -1,7 +1,6 @@
 #include "pwm.h"
 
-void
-PWM::configure(TIM_HandleTypeDef *htim, uint32_t channel, uint32_t timerClock, uint32_t period, uint32_t frequency) {
+void PWM::configure(TIM_HandleTypeDef *htim, uint32_t channel, uint32_t timerClock, uint32_t period, uint32_t frequency) {
     htim_ = htim;
     channel_ = channel;
     timerClock_ = timerClock;
@@ -42,7 +41,7 @@ uint32_t PWM::getAutoReload() const {
     return __HAL_TIM_GET_AUTORELOAD(htim_);
 }
 
-inline uint32_t PWM::getCompareValue() const {
+uint32_t PWM::getCompareValue() const {
     return __HAL_TIM_GET_COMPARE(htim_, channel_);
 }
 

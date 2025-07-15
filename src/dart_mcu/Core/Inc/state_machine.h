@@ -43,7 +43,7 @@ namespace state_machine {
         Failed
     };
 
-    enum E_Gate_State {
+    enum E_Gate_State : uint8_t{
         OPENED,
         CLOSED,
         OPERATING
@@ -83,7 +83,7 @@ namespace state_machine {
         bool ActionRemoteandMatch_launch_complete_ = false;
         // Public
         // 0: 空闲 1: 将Load电机拉到装填位置 2: 降下升降机 3: 放开扳机舵机 4: 将Load电机拉到初始位置 5: 升起升降机
-        uint8_t ActionRemoteandReload_Reload_State = 0;
+        uint8_t ActionRemoteandMatch_Reload_State = 0;
         uint8_t ActionRemoteandReload_Slidedown_State = 0;
         uint8_t ActionRemoteandReload_Reset_State = 0;
         uint8_t ActionMatch_Wait_last_game_progress = 0;

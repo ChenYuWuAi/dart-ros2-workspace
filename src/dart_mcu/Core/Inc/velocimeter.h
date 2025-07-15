@@ -30,7 +30,7 @@ namespace meter {
         uint32_t timer_period;
 
         std::function<void(float)> onVelocityUpdate;
-        double distanceBetweenTwoPulse;
+        double pulse_distance;
         double seconds_per_tick = 0.000001; // 1us/tick
 
         // 双光电门三平均算法相关

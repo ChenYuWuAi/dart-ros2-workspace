@@ -118,7 +118,7 @@ void microros_node_task(void) {
                                     velocity_meter_result.velocity = velocity;
                                     velocity_meter_result.record_time = xTaskGetTickCount();
                                     msgDartStatus.last_launch_speed = velocity_meter_result.velocity;
-                                }, 0.139, 0.240, 0.0000005);
+                                }, 0.147, 0.239, 0.0000005);
 
     xTaskCreate(state_machine::fsm_thread, "fsm_thread", 1024, NULL, 11, NULL);
 
@@ -424,6 +424,9 @@ void choose_sound_effect(int index) {
             break;
         case BuzzerSound::BuzzerWin10Remove:
             soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_win10_remove));
+            break;
+        case BuzzerSound::BuzzerHeIsAPirate:
+            soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_he_is_a_pirate));
             break;
         default:
             soundEffectManager.stopCurrentSoundEffect();

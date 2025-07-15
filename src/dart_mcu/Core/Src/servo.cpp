@@ -24,7 +24,7 @@ void servo::setAngle(uint16_t angle) {
     pwm_.setCompareValue(calCompareValue(angle));
 }
 
-uint16_t servo::getAngle() const {
+uint16_t servo::getAngle () const {
     uint32_t compareValue = pwm_.getCompareValue();
     return (compareValue - minPulseWidth_) * (maxAngle_ - minAngle_) / (maxPulseWidth_ - minPulseWidth_) + minAngle_;
 }
@@ -37,6 +37,6 @@ void servo::disable() {
     pwm_.stop();
 }
 
-inline uint32_t servo::calCompareValue(uint16_t angle) {
+inline uint32_t servo::calCompareValue(uint16_t angle) const{
     return (angle - minAngle_) * (maxPulseWidth_ - minPulseWidth_) / (maxAngle_ - minAngle_) + minPulseWidth_;
 }

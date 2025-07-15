@@ -30,7 +30,7 @@ public:
     void disable();
 
 private:
-    inline uint32_t calCompareValue(uint16_t angle);
+    inline uint32_t calCompareValue(uint16_t angle) const;
 };
 
 extern servo trigger_servo[7];
