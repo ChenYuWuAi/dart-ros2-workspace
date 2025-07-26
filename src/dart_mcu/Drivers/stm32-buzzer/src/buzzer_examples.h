@@ -5157,6 +5157,7 @@ typedef enum {
     BuzzerWinxp,
     BuzzerApproach,
     BuzzerLaoda,
+    BuzzerHeIsAPirate,
     BuzzerStartup,
     BuzzerPlugIn,
     BuzzerRemove,
@@ -5175,7 +5176,6 @@ typedef enum {
     BuzzerIfICouldBeAConstelletionPlus,
     BuzzerWin10PlugIn,
     BuzzerWin10Remove,
-    BuzzerHeIsAPirate,
     BuzzerSoundMax
 } BuzzerSound;
 
