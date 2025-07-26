@@ -484,7 +484,6 @@ trigger_servo[6].setAngle(CONFIG_SLIDE_SERVO_CUT_ANGLE); \
             }
 
             if (success) {
-                // TODO: 将电机零点时的编码值打印到日志，观察零点是否偏移
                 dart_mcu_log("Motor code at zero point is: %d",
                                  motor_controller::MotorTriggerLSController.motor_->current_angle_);
                 soundEffectManager.addSoundEffect(BUZZER_NOTE(buzzer_chunriying));
