@@ -10,6 +10,8 @@
 #include "FreeRTOS.h"
 #include "dartmcu_node.h"
 
+extern uint16_t wheel;
+
 using namespace openfsm;
 
 namespace state_machine {

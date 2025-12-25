@@ -54,6 +54,7 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+extern uint16_t wheel;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
